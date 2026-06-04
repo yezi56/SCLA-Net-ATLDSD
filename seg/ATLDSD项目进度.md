@@ -3988,3 +3988,135 @@ CAA、PConv、LBFTLoss 的定位:
 4. 若 E2 有保留价值，再跑 L0 / L1 这种单变量实验。
 5. 最后才跑完整旧链路 L4。
 ```
+
+## 2026-06-04 E2 完成与 M2 启动
+
+### E2 最终结果
+
+```text
+实验编号: E2
+实验名称: deeplabv3plus_mobilenetv3_large_component_aux_150
+模型: DeepLabV3+ + MobileNetV3-Large + Component Auxiliary Heads
+训练轮数: 150
+状态: 已完成
+best mIoU checkpoint: best_miou_weights.pth
+最佳点: 约 epoch120
+```
+
+E2 best_miou 报告：
+
+```text
+mIoU: 72.11
+FG mIoU: 67.03
+Pixel Accuracy: 97.82
+Severity MAE: 0.01212
+Severity RMSE: 0.03583
+Severity Pearson: 0.8691
+Severity Spearman: 0.9141
+Severity grade accuracy: 94.31%
+Params: 11.73M
+FLOPs: 15.29G
+FPS: 101.10
+```
+
+相对 B0-V3 baseline：
+
+```text
+B0-V3 mIoU: 71.72
+E2 mIoU: 72.11
+提升: +0.39
+
+B0-V3 severity MAE: 约 0.0124
+E2 severity MAE: 0.01212
+结论: 连续严重度误差略有改善。
+
+B0-V3 severity grade accuracy: 约 95.12%
+E2 severity grade accuracy: 94.31%
+结论: 分级准确率略降，后续需要 severity consistency loss 约束。
+```
+
+### M2 决策
+
+由于 E2 已经超过 B0-V3，按训练计划进入 M2：
+
+```text
+M2: DeepLabV3+ + MobileNetV3-Large + Component Auxiliary Heads + Severity Consistency Loss
+```
+
+M2 要解决的问题：
+
+```text
+E2 只让模型学习 lesion、boundary、center 辅助结构。
+它提高了 mIoU 和连续严重度 MAE，但没有直接约束最终 lesion / leaf 严重度比例。
+
+M2 新增 Severity Consistency Loss:
+用 softmax 概率计算 predicted lesion / predicted leaf，
+再和 GT lesion / GT leaf 做 L1 约束。
+
+目标:
+让模型不仅像素分割更准，也让病害严重度估计更稳定。
+```
+
+M2 参数：
+
+```text
+实验编号: M2
+实验名称: deeplabv3plus_mobilenetv3_large_component_aux_severity_150
+模型: DeepLabV3+ + MobileNetV3-Large
+训练方式: 6 类 softmax + Dice + Component Auxiliary Loss + Severity Consistency Loss
+component_aux: true
+component_lesion_weight: 0.4
+component_boundary_weight: 0.2
+component_center_weight: 0.2
+severity_consistency_loss: true
+severity_consistency_weight: 0.1
+severity_loss_type: l1
+训练轮数: 150
+输出目录:
+  D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_severity_150
+```
+
+M2 启动状态：
+
+```text
+启动时间: 2026-06-04 22:36
+本机 PID: 28052
+状态: 正在训练
+日志:
+  D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_severity_150\train_stdout.log
+```
+
+本次代码同步修改：
+
+```text
+Windows:
+- scripts/run_atldsd_deeplabv3plus_mobilenetv3_large_component_aux_severity_150.ps1
+
+Linux:
+- scripts/run_ubuntu_component_aux_severity_v3.sh
+- scripts/run_ubuntu.sh
+
+训练代码:
+- src/models/deeplabv3plus/nets/deeplabv3_training.py
+- src/models/deeplabv3plus/utils/utils_fit.py
+- src/models/deeplabv3plus/train.py
+
+说明文档:
+- README.md
+
+同步状态:
+Windows / Linux 已同步。
+```
+
+M2 判断标准：
+
+```text
+如果 M2 mIoU >= 72.11 且 severity MAE < 0.01212:
+  M2 可作为主线正向创新。
+
+如果 M2 mIoU 小幅低于 72.11，但 severity MAE 和 grade accuracy 明显改善:
+  可以写成 segmentation-severity trade-off，并保留 M2。
+
+如果 M2 mIoU 和 severity 都低于 E2:
+  severity weight=0.1 过强或设计不合适，下一步改为 0.05 或 smooth_l1。
+```

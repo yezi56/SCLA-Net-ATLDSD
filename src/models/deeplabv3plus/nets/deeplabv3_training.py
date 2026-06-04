@@ -196,6 +196,42 @@ def Component_Aux_Loss(outputs, target, num_classes, lesion_weight=0.4, boundary
         return outputs["logits"].sum() * 0.0
     return sum(losses)
 
+
+def Severity_Consistency_Loss(inputs, target, num_classes, loss_type="l1", smooth=1e-6):
+    if isinstance(inputs, dict):
+        inputs = inputs["logits"]
+
+    n, c, h, w = inputs.size()
+    nt, ht, wt = target.size()
+    if h != ht or w != wt:
+        inputs = F.interpolate(inputs, size=(ht, wt), mode="bilinear", align_corners=True)
+
+    valid = target != num_classes
+    gt_leaf = ((target >= 1) & (target < num_classes) & valid).float()
+    gt_lesion = ((target >= 2) & (target < num_classes) & valid).float()
+    gt_leaf_area = gt_leaf.flatten(1).sum(dim=1)
+    gt_lesion_area = gt_lesion.flatten(1).sum(dim=1)
+    valid_images = gt_leaf_area > 0
+    if not valid_images.any():
+        return inputs.sum() * 0.0
+
+    probs = torch.softmax(inputs, dim=1)
+    pred_leaf = probs[:, 1:num_classes].sum(dim=1) * valid.float()
+    pred_lesion = probs[:, 2:num_classes].sum(dim=1) * valid.float()
+    pred_leaf_area = pred_leaf.flatten(1).sum(dim=1)
+    pred_lesion_area = pred_lesion.flatten(1).sum(dim=1)
+
+    gt_severity = gt_lesion_area[valid_images] / gt_leaf_area[valid_images].clamp(min=smooth)
+    pred_severity = pred_lesion_area[valid_images] / pred_leaf_area[valid_images].clamp(min=smooth)
+
+    if loss_type == "smooth_l1":
+        return F.smooth_l1_loss(pred_severity, gt_severity)
+    if loss_type == "mse":
+        return F.mse_loss(pred_severity, gt_severity)
+    if loss_type != "l1":
+        raise ValueError(f"Unsupported severity loss type: {loss_type}")
+    return F.l1_loss(pred_severity, gt_severity)
+
 def weights_init(net, init_type='normal', init_gain=0.02):
     def init_func(m):
         classname = m.__class__.__name__

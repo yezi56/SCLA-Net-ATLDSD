@@ -122,6 +122,12 @@ Run the component-auxiliary E2 experiment:
 ./scripts/run_ubuntu.sh component_aux
 ```
 
+Run the component-auxiliary + severity-consistency M2 experiment:
+
+```bash
+./scripts/run_ubuntu.sh component_aux_severity
+```
+
 Training now saves both validation-loss and validation-mIoU checkpoints:
 
 ```text
@@ -143,6 +149,7 @@ Useful overrides:
 ```bash
 EPOCHS=50 BATCH_SIZE=2 NUM_WORKERS=8 ./scripts/run_ubuntu.sh baseline
 SCLP_PROB=0.5 SCLP_MAX_COMPONENTS=2 ./scripts/run_ubuntu.sh sclp
+SEVERITY_WEIGHT=0.1 SEVERITY_LOSS_TYPE=l1 ./scripts/run_ubuntu.sh component_aux_severity
 PYTHON_BIN=/usr/bin/python3 ./scripts/run_ubuntu.sh baseline
 ```
 
