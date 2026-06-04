@@ -4314,3 +4314,115 @@ S3 相对 E2:
 S4 相对 S2 / S3:
 只有同时优于单模块结果，才作为最终主模型候选。
 ```
+
+## 2026-06-04 实验编号统一：以后不再混用 E / M / S
+
+### 编号问题
+
+之前笔记里同时出现了：
+
+```text
+B0
+E1 / E2
+M2
+S2 / S3 / S4
+L0 / L1 / L2
+```
+
+这会造成阅读混乱。后续论文实验和训练管理统一改成中文编号：
+
+```text
+主线0、主线1、主线2、主线3、主线4
+附加实验A、附加实验B、附加实验C
+```
+
+旧编号只作为历史记录保留，不再扩展。
+
+### 统一后的主线编号
+
+```text
+主线0:
+DeepLabV3+ + MobileNetV3-Large
+旧编号: B0-V3
+作用: 最强普通 baseline
+结果: mIoU 71.72
+
+主线1:
+DeepLabV3+ + MobileNetV3-Large + Component Auxiliary Heads
+旧编号: E2
+作用: 第一个结构模块实验
+模块: lesion head + boundary head + center head
+结果: mIoU 72.11
+
+主线2:
+主线1 + PConv
+旧编号: 原 S2
+作用: 真正动 decoder 模块，验证 PConv 对小病斑和边界的贡献
+状态: 下一步首选训练
+
+主线3:
+主线1 + CAA
+旧编号: 原 S3
+作用: 验证 CAA 注意力是否增强病斑区域响应
+
+主线4:
+主线1 + PConv + CAA
+旧编号: 原 S4
+作用: 验证 PConv 和 CAA 是否互补，作为最终主模型候选
+```
+
+### 统一后的附加实验编号
+
+```text
+附加实验A:
+主线1 + Severity Consistency Loss
+旧编号: M2
+当前状态: 正在训练，PID 28052
+定位: loss 辅助消融，不是主结构创新
+
+附加实验B:
+主线1 + LBFTLoss
+定位: loss 对照，验证类别不均衡 / 小病斑 loss 是否有帮助
+
+附加实验C:
+EfficientNet-B4 + CAA + PConv + LBFTLoss
+定位: 旧完整链路强对照，不作为主线
+```
+
+### 从现在开始的训练顺序
+
+```text
+1. 当前正在跑的附加实验A可以继续观察，但它不是主线。
+2. 下一次真正主线训练只叫“主线2”，即:
+   主线1 + PConv
+3. 主线2 跑完后，再决定是否跑“主线3”，即:
+   主线1 + CAA
+4. 如果主线2 和主线3 至少有一个有效，再跑“主线4”，即:
+   主线1 + PConv + CAA
+5. loss 类实验统一放在“附加实验”里，不再和主线编号混在一起。
+```
+
+### 以后写论文表格时的命名
+
+```text
+Baseline:
+主线0
+
+Ours-1:
+主线1
+
+Ours-2:
+主线2
+
+Ours-3:
+主线3
+
+Ours-Final:
+主线4
+
+Auxiliary Ablation:
+附加实验A / 附加实验B
+
+Legacy Comparator:
+附加实验C
+```
