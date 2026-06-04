@@ -3127,6 +3127,384 @@ Method | MAE | RMSE | Pearson | Spearman | Low Acc | Medium Acc | High Acc
 否则后续所有模块都会被 Reviewer 认为是在负收益增强和混乱评价协议上堆东西。
 ```
 
+## 2026-06-04 结合 2025/2026 文献趋势后的再次修正计划
+
+### E1.1 最终结果
+
+```text
+实验编号: E1.1
+实验名称: deeplabv3plus_mobilenetv3_large_sclp03_150
+状态: 已完成 150 epoch
+模型: DeepLabV3+ + MobileNetV3-Large
+差异: 只增加低强度 SCLP 数据增强
+SCLP 参数:
+  sclp_prob = 0.3
+  sclp_max_components = 2
+```
+
+曲线 mIoU：
+
+```text
+epoch50:  69.90
+epoch60:  62.02
+epoch70:  65.69
+epoch80:  64.52
+epoch90:  68.08
+epoch100: 67.11
+epoch110: 68.20
+epoch120: 63.24
+epoch130: 63.31
+epoch140: 64.21
+epoch150: 66.24
+```
+
+自动报告 best-val-loss 权重：
+
+```text
+mIoU: 68.03
+FG mIoU: 62.43
+Accuracy: 96.74
+
+per-class IoU:
+background: 96.03
+leaf: 90.76
+rust: 77.34
+alternaria_leaf_spot: 50.67
+gray_spot: 48.74
+brown_spot: 44.62
+```
+
+与最强 baseline 对比：
+
+```text
+B0-V3 baseline:
+mIoU: 71.72
+FG mIoU: 66.58
+brown_spot IoU: 48.42
+
+E1.1 SCLP 0.3:
+最高曲线 mIoU: 69.90
+best-val-loss report mIoU: 68.03
+brown_spot IoU: 44.62
+```
+
+结论：
+
+```text
+SCLP 0.3 没有超过 baseline。
+SCLP 0.7 也没有超过 baseline。
+因此，SCLP 不能作为当前论文主创新。
+后续 SCLP 只保留为负结果/辅助消融，不继续作为主线推进。
+```
+
+### 2025/2026 文献趋势
+
+近期强相关论文给出的方向：
+
+```text
+1. 显式 leaf / lesion 分离，再做严重度评估。
+2. 不满足于普通 mIoU，还要报告 severity estimation 指标。
+3. 强调复杂背景、小病斑、边界、类别不平衡。
+4. 用动态损失、边界/区域协同、显式关系建模，而不是简单 copy-paste。
+5. 部分工作已经直接做 severity grading，因此只做普通语义分割不够。
+```
+
+参考文献/方向：
+
+```text
+FLARE: Focused leaf-lesion awareness via explicit relational modeling for plant disease severity assessment.
+Computers and Electronics in Agriculture, 2026.
+核心启发: leaf-lesion 显式关系建模，直接服务 disease severity assessment。
+
+Plant Disease Segmentation Networks for Fast Automatic Severity Estimation.
+Agriculture, 2025.
+核心启发: 分割结果必须落到 severity estimation，不能只停留在 mIoU。
+
+LKCAFormer: a large-kernel cooperative attention transformer for multi-disease segmentation and grading in maize leaf diseases.
+BMC Plant Biology, 2026.
+核心启发: segmentation + grading 一起做，注意力设计围绕多病害和严重度分级。
+
+STAR-Net: spatial-spectral cross-attention and dynamic pixel-wise loss for plant disease segmentation under complex greenhouse conditions.
+Frontiers in Plant Science, 2026.
+核心启发: 动态像素级损失用于处理小目标、边界和类别不平衡，比固定 copy-paste 更像可发表方法。
+```
+
+### 对当前方案的更正
+
+原计划的问题：
+
+```text
+把 SCLP 当作早期核心创新，但实验连续失败。
+如果继续围绕 SCLP 堆注意力，会被 Reviewer 认为是在负收益增强上堆模块。
+```
+
+更正后主线：
+
+```text
+CLSG-Net:
+Component-guided Lesion Segmentation and Severity Grading Network
+
+中文:
+组件引导的病斑分割与病害严重度分级网络
+```
+
+主张改成：
+
+```text
+不是主打 copy-paste。
+不是主打普通注意力。
+而是把 ATLDSD 的结构关系编码进训练和评价:
+leaf region -> lesion component -> disease class -> severity ratio / severity grade
+```
+
+### 下一步不再继续训练 SCLP 0.5
+
+取消/暂停：
+
+```text
+暂停 SCLP 0.5
+暂停 SCLP 0.1
+暂停继续调 copy-paste 参数
+```
+
+原因：
+
+```text
+SCLP 0.7: 最高 mIoU 68.97
+SCLP 0.3: 最高 mIoU 69.90
+baseline: 71.72
+
+两个 SCLP 都低于 baseline。
+继续调 SCLP 的科研收益低，时间成本高。
+```
+
+SCLP 后续定位：
+
+```text
+保留为 ablation 中的 failed augmentation baseline。
+如果后续主模型已经稳定，再考虑作为 minor augmentation 重新测试。
+```
+
+### 新训练计划
+
+#### Step 0：修评价协议
+
+马上做代码修改：
+
+```text
+1. 训练过程保存 best_miou_weights.pth。
+2. 保留 best_epoch_weights.pth 但重命名语义:
+   best_val_loss_weights.pth
+3. 报告脚本支持指定 checkpoint:
+   last / best_val_loss / best_miou / epXXX
+4. 自动报告默认改为 best_miou。
+```
+
+目的：
+
+```text
+让所有实验比较都使用同一 checkpoint 选择规则。
+避免 Reviewer 质疑 cherry-picking。
+```
+
+#### Step 1：补 severity metrics
+
+新增评估：
+
+```text
+GT severity = GT lesion pixels / GT leaf pixels
+Pred severity = Pred lesion pixels / Pred leaf pixels
+
+lesion classes:
+rust, alternaria_leaf_spot, gray_spot, brown_spot
+
+leaf area:
+leaf + lesion classes
+```
+
+输出指标：
+
+```text
+Severity MAE
+Severity RMSE
+Pearson correlation
+Spearman correlation
+Low / Medium / High severity accuracy
+Severity confusion matrix
+```
+
+输出文件：
+
+```text
+severity_metrics.json
+severity_per_image.csv
+severity_confusion_matrix.csv
+```
+
+#### Step 2：重新导出已有实验
+
+统一导出：
+
+```text
+B0-V3 baseline
+E1 SCLP 0.7
+E1.1 SCLP 0.3
+```
+
+每个都必须有：
+
+```text
+best_miou report
+severity metrics
+per-class metrics
+complexity metrics
+```
+
+这一步完成后才能继续训练新模块。
+
+#### Step 3：训练 Component Auxiliary Baseline
+
+新实验：
+
+```text
+E2:
+DeepLabV3+ MobileNetV3-Large + Component Auxiliary Heads
+```
+
+辅助头：
+
+```text
+1. lesion binary mask head
+2. lesion boundary head
+3. lesion distance / center heatmap head
+```
+
+主输出仍然是：
+
+```text
+6-class semantic segmentation
+```
+
+目标：
+
+```text
+提升小病斑、边界和病斑连通组件定位。
+```
+
+成功标准：
+
+```text
+mIoU >= 71.72
+FG mIoU >= 66.58
+brown_spot IoU >= 48.42
+Severity MAE 低于 baseline
+```
+
+#### Step 4：加入 Severity Consistency Loss
+
+新实验：
+
+```text
+E3:
+E2 + Severity Consistency Loss
+```
+
+损失：
+
+```text
+L_sev = SmoothL1(pred_lesion_area / pred_leaf_area, gt_lesion_area / gt_leaf_area)
+```
+
+目标：
+
+```text
+不只提升分割 mIoU，还要让预测病斑面积比例更接近真实严重度。
+```
+
+成功标准：
+
+```text
+即使 mIoU 只小幅提升，也必须显著降低 Severity MAE / RMSE。
+```
+
+#### Step 5：最后才做 SCA 注意力
+
+新实验：
+
+```text
+E4:
+E3 + Severity-aware Component-guided Attention
+```
+
+注意力必须满足：
+
+```text
+由 lesion / boundary / severity cue 引导。
+不能只是 SE / CBAM / 普通空间注意力。
+```
+
+目标：
+
+```text
+让注意力服务于病斑组件和严重度判断，而不是泛泛加模块。
+```
+
+### 修正后的实验顺序
+
+```text
+现在:
+E1.1 已完成，SCLP 降级。
+
+下一步:
+1. 改 best_miou checkpoint 保存逻辑。
+2. 改 severity metrics 导出。
+3. 重导 B0-V3 / E1 / E1.1。
+4. 开 E2 Component Auxiliary Heads。
+5. 开 E3 Severity Consistency Loss。
+6. 开 E4 Severity-aware Component-guided Attention。
+7. 选最终模型后做 3 seeds。
+8. 最终 test set 只评一次。
+```
+
+### 论文主线更新
+
+旧主线：
+
+```text
+SCLA-Net:
+Severity-Controlled Lesion Augmentation and Component-guided Attention Network
+```
+
+问题：
+
+```text
+augmentation 目前实验失败，不适合放在标题和主创新第一位。
+```
+
+新主线建议：
+
+```text
+CLSG-Net:
+Component-guided Lesion Segmentation and Severity Grading Network
+```
+
+论文贡献改为：
+
+```text
+1. A component-guided auxiliary learning framework for lesion-aware apple leaf disease segmentation.
+2. A severity consistency constraint that aligns segmentation with disease severity grading.
+3. A severity-aware component-guided attention module for small lesion and boundary-sensitive representation.
+4. A rigorous ATLDSD benchmark reporting both segmentation metrics and severity estimation metrics.
+```
+
+最终判断：
+
+```text
+现在不该继续赌 SCLP。
+下一步的真正关键是把“语义分割”升级成“病斑组件分割 + 严重度估计”。
+这样才更接近 2025/2026 相关论文的发表逻辑。
+```
+
 ```text
 提交: 6a1e330
 标题: Add Ubuntu Python bootstrap script
