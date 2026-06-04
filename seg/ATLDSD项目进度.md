@@ -3615,6 +3615,97 @@ E2 目标:
 3. 提升 gray_spot / brown_spot 等小病斑类。
 ```
 
+## 2026-06-04 E2 Component Auxiliary Heads 启动
+
+### 本次代码提交
+
+```text
+提交: 58ff1b9
+标题: Add component auxiliary training experiment
+目的:
+实现并启动 E2: DeepLabV3+ MobileNetV3-Large + Component Auxiliary Heads。
+
+主要修改:
+- src/models/deeplabv3plus/nets/deeplabv3_plus.py
+- src/models/deeplabv3plus/nets/deeplabv3_training.py
+- src/models/deeplabv3plus/utils/utils_fit.py
+- src/models/deeplabv3plus/utils/utils_metrics.py
+- src/models/deeplabv3plus/utils/callbacks.py
+- src/models/deeplabv3plus/deeplab.py
+- src/models/deeplabv3plus/train.py
+- scripts/export_segmentation_report.py
+- scripts/run_atldsd_deeplabv3plus_mobilenetv3_large_component_aux_150.ps1
+- scripts/run_ubuntu_component_aux_v3.sh
+- scripts/run_ubuntu.sh
+- README.md
+
+Windows / Linux 同步状态:
+已同步。
+```
+
+### E2 结构
+
+```text
+主干: MobileNetV3-Large
+分割头: DeepLabV3+ 6-class softmax
+辅助头:
+1. lesion binary mask head
+2. lesion boundary head
+3. lesion center heatmap head
+```
+
+辅助监督来自原 mask 自动生成，不需要额外标注：
+
+```text
+lesion target = class 2/3/4/5
+boundary target = lesion eroded boundary
+center target = lesion local-density heatmap
+```
+
+loss 权重：
+
+```text
+main segmentation loss: CE + Dice
+component_lesion_weight: 0.4
+component_boundary_weight: 0.2
+component_center_weight: 0.2
+```
+
+### 启动状态
+
+```text
+实验编号: E2
+实验名称: deeplabv3plus_mobilenetv3_large_component_aux_150
+启动时间: 2026-06-04 17:23
+PID: 26536
+状态: 正在训练
+输出目录:
+  D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_150
+```
+
+### 成功标准
+
+```text
+必须超过或至少接近:
+B0-V3 mIoU = 71.72
+B0-V3 FG mIoU = 66.58
+B0-V3 Severity MAE = 0.0124
+B0-V3 Grade Acc = 95.12
+```
+
+判断规则：
+
+```text
+如果 E2 mIoU 提升，且 severity MAE 不变差:
+  Component Auxiliary Heads 可作为第一正向创新。
+
+如果 E2 mIoU 小幅下降，但 severity MAE 明显改善:
+  可写成 segmentation-severity trade-off，进入 E3 Severity Consistency Loss。
+
+如果 E2 mIoU 和 severity 都下降:
+  辅助头设计需要调整权重或目标，不进入 E3。
+```
+
 ```text
 提交: 6a1e330
 标题: Add Ubuntu Python bootstrap script
