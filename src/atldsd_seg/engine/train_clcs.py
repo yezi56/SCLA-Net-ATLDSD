@@ -18,7 +18,7 @@ from atldsd_seg.constants import CLASS_NAMES, NUM_CLASSES
 from atldsd_seg.losses.compositional import CompositionalSegmentationLoss
 from atldsd_seg.metrics.segmentation import compute_confusion_matrix, summarize_metrics
 from atldsd_seg.models.clcs_deeplabv3plus import CLCSDeepLabV3Plus
-from atldsd_seg.paths import DEEPLABV3PLUS_ROOT
+from atldsd_seg.paths import DEFAULT_VOCDEVKIT_PATH, DEEPLABV3PLUS_ROOT
 
 if str(DEEPLABV3PLUS_ROOT) not in sys.path:
     sys.path.insert(0, str(DEEPLABV3PLUS_ROOT))
@@ -42,7 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train CLCS-Net on ATLDSD.")
     parser.add_argument("--cuda", type=str2bool, default=True)
     parser.add_argument("--seed", type=int, default=11)
-    parser.add_argument("--vocdevkit-path", type=str, default=r"D:\dataset\ATLDSD\VOCdevkit")
+    parser.add_argument("--vocdevkit-path", type=str, default=str(DEFAULT_VOCDEVKIT_PATH))
     parser.add_argument("--backbone", type=str, default="efficientnet_b4")
     parser.add_argument("--pretrained", type=str2bool, default=True)
     parser.add_argument("--downsample-factor", type=int, default=16, choices=[8, 16])

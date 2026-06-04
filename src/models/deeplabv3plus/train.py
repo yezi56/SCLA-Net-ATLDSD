@@ -26,6 +26,11 @@ from utils.dataloader import DeeplabDataset, deeplab_dataset_collate
 from utils.utils import seed_everything, show_config, worker_init_fn
 from utils.utils_fit import fit_one_epoch
 
+try:
+    from atldsd_seg.paths import DEFAULT_VOCDEVKIT_PATH
+except ImportError:
+    DEFAULT_VOCDEVKIT_PATH = Path("VOCdevkit")
+
 
 def str2bool(value):
     if isinstance(value, bool):
@@ -126,9 +131,14 @@ def build_cls_weights(args):
 
 
 def resolve_dataset_path(args):
+    env_vocdevkit_path = os.environ.get("ATLDSD_VOCDEVKIT_PATH")
     if args.vocdevkit_path != "VOCdevkit":
         return args.vocdevkit_path
-    return os.path.join(args.datasets_root, f"{args.dataset_name}devkit")
+    if env_vocdevkit_path:
+        return env_vocdevkit_path
+    if args.datasets_root != ".":
+        return os.path.join(args.datasets_root, f"{args.dataset_name}devkit")
+    return str(DEFAULT_VOCDEVKIT_PATH)
 
 
 def default_class_names(num_classes):
@@ -140,7 +150,9 @@ def default_class_names(num_classes):
 def auto_export_report(args, dataset_path):
     model_root = Path(__file__).resolve().parent
     lab_root = model_root.parents[2]
-    exporter = lab_root / "scripts" / "export_riceseg_segmentation_report.py"
+    exporter = lab_root / "scripts" / "export_segmentation_report.py"
+    if not exporter.exists():
+        exporter = lab_root / "scripts" / "export_riceseg_segmentation_report.py"
     if not exporter.exists():
         print(f"[AutoReport] Skip: exporter not found: {exporter}")
         return

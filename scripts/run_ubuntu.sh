@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MODE="${1:-sclp}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+case "${MODE}" in
+  baseline|v3|b0)
+    exec "${SCRIPT_DIR}/run_ubuntu_baseline_v3.sh"
+    ;;
+  sclp|e1|ours)
+    exec "${SCRIPT_DIR}/run_ubuntu_sclp_v3.sh"
+    ;;
+  *)
+    echo "Usage: $0 [baseline|sclp]" >&2
+    exit 2
+    ;;
+esac

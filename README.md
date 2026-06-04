@@ -40,11 +40,25 @@ Severity-Controlled Lesion Augmentation and Component-guided Attention Network
 
 The dataset is not included in this repository.
 
-Expected local layout:
+Windows local layout:
 
 ```text
 D:\dataset\ATLDSD\VOCdevkit\VOC2012
 D:\dataset\ATLDSD\VOCdevkit\VOC2007
+```
+
+Ubuntu server layout:
+
+```text
+/home/liuzhe/SCLA-Net-ATLDSD
+/home/liuzhe/SCLA-Net-ATLDSD/VOCdevkit/VOC2007
+/home/liuzhe/SCLA-Net-ATLDSD/VOCdevkit/VOC2012
+```
+
+You can also keep the dataset elsewhere and set:
+
+```bash
+export ATLDSD_VOCDEVKIT_PATH=/absolute/path/to/VOCdevkit
 ```
 
 The prepared split sizes are:
@@ -56,6 +70,45 @@ test:  247
 ```
 
 ## Important Scripts
+
+### Ubuntu Quickstart
+
+Put the repository under `/home/liuzhe`, put `VOCdevkit` in the repository root or set `ATLDSD_VOCDEVKIT_PATH`, then run:
+
+```bash
+cd /home/liuzhe/SCLA-Net-ATLDSD
+chmod +x scripts/*.sh
+./scripts/setup_ubuntu_env.sh cu121
+./scripts/run_ubuntu.sh sclp
+```
+
+Use `cpu`, `cu118`, `cu121`, or `cu124` for the setup script according to the server CUDA driver. If PyTorch is already installed, use:
+
+```bash
+./scripts/setup_ubuntu_env.sh skip
+```
+
+Run the current strongest baseline:
+
+```bash
+./scripts/run_ubuntu.sh baseline
+```
+
+Run the current SCLA-Net E1 experiment:
+
+```bash
+./scripts/run_ubuntu.sh sclp
+```
+
+Useful overrides:
+
+```bash
+EPOCHS=50 BATCH_SIZE=2 NUM_WORKERS=8 ./scripts/run_ubuntu.sh baseline
+SCLP_PROB=0.5 SCLP_MAX_COMPONENTS=2 ./scripts/run_ubuntu.sh sclp
+PYTHON_BIN=/usr/bin/python3 ./scripts/run_ubuntu.sh baseline
+```
+
+### Windows Scripts
 
 Baseline:
 
