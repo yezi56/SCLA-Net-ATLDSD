@@ -1,0 +1,2672 @@
+# ATLDSD 项目进度
+
+## 2026-06-02 Backbone 选择更正
+
+### 为什么第一轮用了 MobileNetV2
+
+这次 150 轮训练选择的是：
+
+```text
+DeepLabV3+ + MobileNetV2
+```
+
+原因不是因为 `D:\Code\all` 的主线默认就是 MobileNetV2，而是因为我当时优先复用了 `D:\Code\all\docs\RICESEG_BASELINE_PROGRESS.md` 里的轻量 baseline 命令。
+
+这样做的工程理由是：
+
+1. 本地已经有 `deeplab_mobilenetv2.pth`，不用联网下载权重。
+2. 训练速度快，150 epoch 能较快闭环。
+3. 参数量低，适合作为轻量 baseline 和 FPS/Params 对比基准。
+4. 先验证 ATLDSD 的 VOC 数据、类别、mask、训练和报告导出流程是否完整可跑。
+
+### 需要更正的地方
+
+`D:\Code\all` 的主线并不是 MobileNetV2。
+
+核对结果：
+
+```text
+D:\Code\all\src\models\deeplabv3plus\train.py 默认 backbone = efficientnet_b4
+D:\Code\all\plan.md 的 E00 = DeepLabV3+ + EfficientNet-B4 + CE
+```
+
+所以目前这轮结果应该定义为：
+
+```text
+轻量级 sanity baseline / speed baseline
+```
+
+不能把它当作论文主 baseline。
+
+### 当前已有结果
+
+MobileNetV2 150 epoch 已完成：
+
+```text
+输出目录：D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenet_150
+best_val 报告：reports\best_val
+```
+
+统一报告指标：
+
+```text
+mIoU all:          67.58%
+foreground mIoU:   61.75%
+mDice all:         78.59%
+FPS:              123.23
+Params:             5.81M
+FLOPs:             13.23G
+```
+
+每类 IoU：
+
+```text
+background:             96.75%
+leaf:                   92.10%
+rust:                   77.50%
+alternaria_leaf_spot:   45.84%
+gray_spot:              49.42%
+brown_spot:             43.87%
+```
+
+短板很清楚：`alternaria_leaf_spot / gray_spot / brown_spot` 较低，可以支撑后续注意力、边界监督和类别不均衡 loss 的改进故事。
+
+### 下一步应该怎么改
+
+为了和 `D:\Code\all` 的主线一致，下一条正式 baseline 应该跑：
+
+```text
+DeepLabV3+ + EfficientNet-B4
+```
+
+本项目里已经复制到了：
+
+```text
+D:\Code\ATLDSD\src\models\deeplabv3plus
+D:\Code\ATLDSD\src\models\efficientnet
+```
+
+并且本地已经有 EfficientNet-B4 权重：
+
+```text
+D:\Code\ATLDSD\src\models\efficientnet\model_data\efficientnet_b4_rwightman-23ab8bcd.pth
+```
+
+建议实验顺序更新为：
+
+1. 保留 `DeepLabV3+ + MobileNetV2` 作为轻量 baseline。
+2. 跑 `DeepLabV3+ + EfficientNet-B4` 作为正式 plain baseline。
+3. 在 EfficientNet-B4 baseline 上加 Weighted CE / Dice / Focal / Tversky。
+4. 再做单模块注意力消融，例如 ECA、CAA、Coordinate Attention。
+5. 再加入 SegNeXt 作为近年对比模型，而不是直接拿 SegNeXt 替代 DeepLabV3+ 主线。
+
+### 当前项目代码状态
+
+之前 ATLDSD 目录下没有 `src`，因为第一轮训练直接调用了 `D:\Code\all` 的代码。
+现在已经把核心代码复制到本项目：
+
+```text
+D:\Code\ATLDSD\src\models\deeplabv3plus
+D:\Code\ATLDSD\src\models\segnext
+D:\Code\ATLDSD\src\modules\plugins
+D:\Code\ATLDSD\scripts
+```
+
+复跑 MobileNetV2 baseline 的脚本：
+
+```text
+D:\Code\ATLDSD\scripts\run_atldsd_deeplabv3plus_mobilenet_150.ps1
+```
+
+结论：MobileNetV2 是第一条轻量跑通线，不是最终论文主线。正式论文 baseline 应该补跑 EfficientNet-B4。
+
+## 2026-06-02 Backbone ???? EfficientNet-B4
+
+???? DeepLabV3+ baseline ?? MobileNetV2 ????
+
+```text
+DeepLabV3+ + EfficientNet-B4
+```
+
+???????
+
+```text
+D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_efficientnet_b4_150
+```
+
+?????
+
+```text
+D:\Code\ATLDSD\scripts\run_atldsd_deeplabv3plus_b4_150.ps1
+```
+
+?? PID ???
+
+```text
+D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_efficientnet_b4_150\train_pid.txt
+```
+
+????????? `backbone = efficientnet_b4`?`pretrained = true`??? EfficientNet-B4 ???? `src\models\efficientnet\backbone.py` ?????
+
+## 2026-06-02 CLCS-Net ???????
+
+???????????? CLCS-Net ??????????????? B4 baseline?
+
+?????
+
+```text
+D:\Code\ATLDSD\src\atldsd_seg\models\clcs_deeplabv3plus.py
+D:\Code\ATLDSD\src\atldsd_seg\losses\compositional.py
+D:\Code\ATLDSD\src\atldsd_seg\models\CLCS_NET.md
+```
+
+?????
+
+```text
+???? -> ?? DeepLabV3+ encoder/decoder -> ?????
+
+leaf head:    background vs leaf
+lesion head:  non-lesion vs lesion
+disease head: rust / alternaria / gray / brown
+```
+
+?????
+
+```text
+background   = not leaf
+healthy leaf = leaf and not lesion
+disease      = leaf and lesion and disease type
+```
+
+??? 6 ? mask ?????????????????smoke test ????`final_logits=(B,6,H,W)`?`leaf_logits=(B,2,H,W)`?`lesion_logits=(B,2,H,W)`?`disease_logits=(B,4,H,W)`?
+
+## 2026-06-02 ?????????????
+
+### ??????
+
+??????? baseline?
+
+```text
+DeepLabV3+ + EfficientNet-B4
+?????150 epochs
+?????? Epoch 75/150
+?????D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_efficientnet_b4_150
+```
+
+?????? mIoU ??? Epoch 70?
+
+```text
+mIoU:     63.40
+mPA:      78.47
+Accuracy: 95.36
+Train Loss: 0.677
+Val Loss:   0.695
+```
+
+???`mIoU / mPA / Accuracy / Val Loss` ????? val?`Train Loss` ????? train???????????150 ?????? `reports/best_val` ??????
+
+### ???????
+
+?? `src` ???????????
+
+```text
+src/atldsd_seg/          ??????
+src/models/              ? DeepLabV3+?SegNeXt?U-Net?PSPNet ?????
+src/modules/plugins/     ???? loss ??
+```
+
+??????????
+
+```text
+D:\Code\ATLDSD\scripts\run_atldsd_experiment.ps1
+D:\Code\ATLDSD\scripts\run_atldsd_deeplabv3plus_b4_150.ps1
+```
+
+### ??? CLCS-Net ????
+
+????????? CLCS-Net ???????? B4 baseline ???
+
+?????
+
+```text
+D:\Code\ATLDSD\src\atldsd_seg\models\clcs_deeplabv3plus.py
+D:\Code\ATLDSD\src\atldsd_seg\losses\compositional.py
+D:\Code\ATLDSD\src\atldsd_seg\models\CLCS_NET.md
+```
+
+CLCS-Net ????
+
+```text
+???? -> ?? DeepLabV3+ encoder/decoder -> ?????
+
+leaf head:    background vs leaf
+lesion head:  non-lesion vs lesion
+disease head: rust / alternaria / gray / brown
+```
+
+????? 6 ??
+
+```text
+background   = not leaf
+healthy leaf = leaf and not lesion
+disease      = leaf and lesion and disease type
+```
+
+???? 6 ? softmax ??????????????? 6 ??CLCS-Net ?????? leaf?lesion?disease type ?????????????? 6 ? mask???????????????????
+
+### Zotero ????
+
+??? Zotero ? `seg` ?? 3 ??????
+
+```text
+Tomato TransDeepLab
+DS-DETR
+Deep learning architectures for semantic segmentation and automatic estimation of severity of foliar symptoms
+```
+
+???related work ??????? -> ?????? -> ?????????????
+
+## ????? CLCS-Net???????
+
+### ?????? Baseline
+
+?????????????????????????
+
+????????
+
+```text
+B1 DeepLabV3+ + MobileNetV2
+B2 DeepLabV3+ + EfficientNet-B4
+B3 U-Net
+B4 PSPNet
+B5 SegNeXt
+```
+
+?? B2 ?????? baseline????? CLCS-Net ????? EfficientNet-B4 backbone??????
+
+### ????????
+
+?????????????????????
+
+???????
+
+```text
+A0 DeepLabV3+ + EfficientNet-B4, ordinary 6-class softmax
+A1 A0 + leaf head auxiliary loss
+A2 A1 + lesion head auxiliary loss
+A3 A2 + disease type head auxiliary loss
+A4 CLCS-Net: leaf/lesion/disease ??????
+A5 A4 + component-aware branch
+A6 A5 + severity-controlled lesion copy-paste
+```
+
+???
+
+```text
+A0 ??????? baseline?
+A1/A2/A3 ??????????????
+A4 ????? compositional fusion ?????
+A5 ????/??/???????????????
+A6 ??????? copy-paste ?????????????
+```
+
+### ?????????
+
+???????
+
+```text
+mIoU
+mDice
+pixel accuracy
+mPA
+?? IoU
+?? Dice
+```
+
+????????
+
+```text
+rust
+alternaria_leaf_spot
+gray_spot
+brown_spot
+```
+
+??????
+
+```text
+overall severity MAE = |pred lesion_ratio - gt lesion_ratio|
+per-disease severity MAE
+severity grade accuracy
+severity grade quadratic weighted kappa???
+```
+
+??????
+
+```text
+Params
+FLOPs
+FPS
+```
+
+### ???????????
+
+? 1???????
+
+```text
+Model | Backbone | mIoU | mDice | Params | FLOPs | FPS
+```
+
+? 2??? IoU
+
+```text
+Model | leaf | rust | alternaria | gray | brown | mIoU
+```
+
+? 3?CLCS-Net ??
+
+```text
+Setting | leaf head | lesion head | disease head | compositional fusion | mIoU | lesion mIoU | severity MAE
+```
+
+? 4??????
+
+```text
+Model | overall severity MAE | rust MAE | alternaria MAE | gray MAE | brown MAE | grade accuracy
+```
+
+? 1??????
+
+```text
+image -> encoder -> decoder -> leaf head / lesion head / disease head -> composition -> 6-class mask -> severity
+```
+
+? 2??????
+
+```text
+?? | GT | DeepLabV3+ B4 | CLCS-Net | error map
+```
+
+? 3???????
+
+```text
+???? alternaria / gray / brown ????????
+```
+
+### ????????
+
+????????????????
+
+```text
+1. ? DeepLabV3+ + EfficientNet-B4 150 ??????? baseline?
+2. ? CLCS-Net ??????? A4?
+3. ?? A4 ? A0 ? lesion mIoU ? severity MAE ??????? A1/A2/A3 ????
+4. ?? component-aware branch?
+5. ??? severity-controlled copy-paste?
+6. ? SegNeXt / U-Net / PSPNet ???
+```
+
+??????????????
+
+```text
+CLCS-Net ?? DeepLabV3+ B4?
+lesion mIoU ?????
+????? IoU ?????
+severity MAE ?????
+```
+
+????? Accuracy?? mIoU??? IoU?severity MAE ????????????
+
+## 2026-06-02 B4 baseline 跑完后的实验顺序
+
+### 总原则
+
+当前这轮 `DeepLabV3+ + EfficientNet-B4 + 普通 6 类 softmax` 是正式论文的普通 baseline。它跑完后，不是把所有模型都随便重跑一遍，而是按“先确认普通 baseline、再确认三头结构、最后在三头上加模块”的顺序推进。
+
+核心逻辑：
+
+```text
+普通 6 类 baseline -> 三头组合 baseline -> 三头 + 组件/边界/增强模块 -> 与外部模型对比
+```
+
+### 第一阶段：整理当前 B4 baseline
+
+跑完当前 150 轮后，先做这些事：
+
+```text
+1. 用 best_epoch_weights.pth 和 last_epoch_weights.pth 分别在 val/test 上评估
+2. 记录 mIoU、mDice、mPA、pixel accuracy
+3. 记录每一类 IoU：leaf、rust、alternaria、gray、brown
+4. 计算严重度误差：pred lesion area / pred leaf area 与 GT 的差
+5. 导出可视化：image / GT / prediction / error map
+```
+
+这个实验在论文中记为：
+
+```text
+B0: DeepLabV3+ + EfficientNet-B4 + 6-class softmax
+```
+
+它的作用是证明：普通语义分割在 ATLDSD 上能做到什么水平。
+
+### 第二阶段：训练三头组合 baseline
+
+下一步优先训练：
+
+```text
+Ours-A: DeepLabV3+ + EfficientNet-B4 + leaf / lesion / disease type 三头组合
+```
+
+这个模型不加注意力、不加 copy-paste、不加复杂模块。只改变输出建模方式：
+
+```text
+Head 1: leaf / not leaf
+Head 2: lesion / not lesion
+Head 3: rust / alternaria / gray / brown
+
+组合：
+background = not leaf
+healthy leaf = leaf and not lesion
+disease class = leaf and lesion and disease type
+```
+
+这一步最关键。如果 Ours-A 比 B0 的 lesion IoU、disease IoU、severity MAE 更好，说明“三头组合”本身有价值，论文主线就站住了。
+
+### 第三阶段：三头内部消融
+
+为了证明不是随便多加几个 head，而是结构化建模有效，需要跑：
+
+```text
+A0: DeepLabV3+ + B4 + 6-class softmax
+A1: A0 + leaf auxiliary head
+A2: A1 + lesion auxiliary head
+A3: A2 + disease type auxiliary head
+A4: leaf / lesion / disease type compositional fusion
+```
+
+重点看：
+
+```text
+lesion mIoU 是否提高
+alternaria / gray / brown 这些小病斑类 IoU 是否提高
+severity MAE 是否下降
+边界是否更完整
+```
+
+如果 A1-A3 有提升，但 A4 提升更明显，可以写成：辅助监督有帮助，但真正有效的是把输出空间按 leaf-lesion-disease 层级关系组合起来。
+
+### 第四阶段：在三头基础上加模块
+
+后续模块优先加在三头模型上，而不是普通 6 类 baseline 上。
+
+建议顺序：
+
+```text
+Ours-A: 三头组合 baseline
+Ours-B: Ours-A + component-aware auxiliary branch
+Ours-C: Ours-B + boundary / distance transform supervision
+Ours-D: Ours-C + severity-controlled lesion copy-paste
+Ours-E: Ours-D + attention 或轻量特征模块
+```
+
+不要一开始就把所有模块堆上去。每次只加一个模块，形成可解释消融。
+
+### 第五阶段：外部模型对比
+
+等 Ours-A/Ours-B/Ours-C 跑出结果后，再跑外部模型对比：
+
+```text
+U-Net
+U-Net++
+PSPNet
+SegNeXt
+DeepLabV3+ + MobileNetV2
+DeepLabV3+ + EfficientNet-B4
+```
+
+SegNeXt 可以作为近年分割模型对比，但不要把它当主创新。它的作用是回答：即使和较新的分割骨干/结构相比，我们的结构化输出建模仍然有效。
+
+### 推荐训练顺序
+
+```text
+1. 等当前 DeepLabV3+ + B4 150 轮结束，导出完整 report
+2. 训练 CLCS / 三头组合 baseline：DeepLabV3+ + B4 + 三头组合
+3. 跑 A1/A2/A3/A4 三头消融
+4. 加 component-aware branch
+5. 加 boundary / distance transform 辅助监督
+6. 加 severity-controlled lesion copy-paste
+7. 跑 SegNeXt、U-Net、PSPNet 外部模型对比
+8. 统一 test set 复测所有最终模型
+```
+
+### 论文中最重要的表
+
+表 1：主模型对比
+
+```text
+Model | Backbone | mIoU | lesion mIoU | disease mIoU | severity MAE | Params | FLOPs | FPS
+```
+
+表 2：三头消融
+
+```text
+Setting | leaf head | lesion head | disease head | compositional fusion | mIoU | lesion mIoU | severity MAE
+```
+
+表 3：每类 IoU
+
+```text
+Model | leaf | rust | alternaria | gray | brown | mean
+```
+
+表 4：严重度估计
+
+```text
+Model | overall MAE | rust MAE | alternaria MAE | gray MAE | brown MAE | severity grade accuracy
+```
+
+### 当前判断
+
+以后不是“只训练三头 baseline”，而是：
+
+```text
+普通 baseline 用来做对照；
+三头 baseline 用来证明主创新；
+后续模块主要加在三头基础上；
+外部模型用来证明不是只赢了一个弱 baseline。
+```
+
+最优先级是把 `B0` 和 `Ours-A` 做扎实。只要 `Ours-A` 在 lesion IoU 和 severity MAE 上明显优于 `B0`，这条 SCI 二区论文路线就有基础。
+## 2026-06-02 启动 Ours-A 三头组合 baseline
+
+当前 B0 普通 baseline 已完成后，下一步实验启动：
+
+```text
+Ours-A: CLCS-Net / DeepLabV3+ + EfficientNet-B4 + leaf / lesion / disease type 三头组合
+```
+
+训练设置：
+
+```text
+backbone: EfficientNet-B4
+input shape: 256 x 256
+epochs: 150
+freeze epochs: 50
+freeze batch size: 4
+unfreeze batch size: 2
+optimizer: SGD
+initial lr: 0.001
+split: train 1148 / val 246
+```
+
+输出目录：
+
+```text
+D:\Code\ATLDSD\outputs\atldsd\clcs_deeplabv3plus_efficientnet_b4_150
+```
+
+关键文件：
+
+```text
+train_stdout.log
+train_stderr.log
+train_pid.txt
+weights\last_epoch_weights.pth
+weights\best_miou_epoch_weights.pth
+weights\best_loss_epoch_weights.pth
+```
+
+这一步的目的不是加模块，而是先回答：
+
+```text
+只把普通 6 类 softmax 改成 leaf / lesion / disease type 三头组合，是否能提升小病斑 IoU 和严重度估计？
+```
+
+对照对象：
+
+```text
+B0: DeepLabV3+ + EfficientNet-B4 + 6-class softmax
+Ours-A: DeepLabV3+ + EfficientNet-B4 + 三头组合
+```
+
+如果 Ours-A 在 `lesion mIoU`、`alternaria / gray / brown IoU`、`severity MAE` 上优于 B0，后续再加 component-aware branch、boundary/distance supervision 和 severity-controlled copy-paste。
+## 2026-06-02 Ours-A 三头组合 baseline 训练完成
+
+实验：
+
+```text
+Ours-A: CLCS-Net / DeepLabV3+ + EfficientNet-B4 + leaf / lesion / disease type 三头组合
+```
+
+训练已完成 150 epoch。
+
+输出目录：
+
+```text
+D:\Code\ATLDSD\outputs\atldsd\clcs_deeplabv3plus_efficientnet_b4_150
+```
+
+最优 mIoU 权重：
+
+```text
+D:\Code\ATLDSD\outputs\atldsd\clcs_deeplabv3plus_efficientnet_b4_150\weights\best_miou_epoch_weights.pth
+```
+
+最优 mIoU 出现在：
+
+```text
+Epoch 120
+mIoU: 65.68%
+mDice: 77.27%
+Foreground mIoU: 60.18%
+Pixel Accuracy: 94.91%
+Val Loss: 0.264
+```
+
+150 epoch 最终轮：
+
+```text
+Epoch 150
+mIoU: 63.56%
+mPA: 70.77%
+Accuracy: 95.95%
+Train Loss: 0.144
+Val Loss: 0.241
+```
+
+注意：150 轮的 val loss 更低，但 mIoU 不如 120 轮。因此论文对比应该优先使用 `best_miou_epoch_weights.pth`，而不是最后一轮权重。
+
+### 与 B0 普通 B4 baseline 对比
+
+```text
+B0: DeepLabV3+ + EfficientNet-B4 + 普通 6 类 softmax
+Ours-A: DeepLabV3+ + EfficientNet-B4 + 三头组合
+```
+
+总体指标：
+
+```text
+B0 epoch150:
+mIoU 65.59%
+mDice 77.00%
+Foreground mIoU 59.59%
+Accuracy 96.44%
+
+Ours-A best epoch120:
+mIoU 65.68%
+mDice 77.27%
+Foreground mIoU 60.18%
+Accuracy 94.91%
+```
+
+结论：
+
+```text
+Ours-A 比 B0 略高，但整体提升很小。
+mIoU: +0.09%
+mDice: +0.27%
+Foreground mIoU: +0.59%
+Accuracy: -1.53%
+```
+
+每类 IoU：
+
+```text
+Class                  B0       Ours-A    Change
+leaf                   89.96    86.20     -3.76
+rust                   76.34    79.13     +2.79
+alternaria_leaf_spot   42.08    48.70     +6.62
+gray_spot              45.19    49.06     +3.87
+brown_spot             44.38    37.79     -6.59
+```
+
+解释：
+
+```text
+三头组合对 rust、alternaria、gray spot 有帮助，尤其 alternaria 提升明显。
+但 brown spot 明显下降，leaf 也下降，导致总体 mIoU 只略微超过 B0。
+```
+
+这说明三头结构不是完全没用，但目前还不足以作为强论文贡献。下一步应该专门解决病斑组件和 brown spot 退化问题。
+
+## 2026-06-02 下一步训练建议
+
+### 不建议马上做的事
+
+暂时不要直接做：
+
+```text
+三头 + 随便一个注意力模块
+三头 + 多个模块一起堆
+三头 + copy-paste
+```
+
+原因：
+
+```text
+Ours-A 现在只是略微超过 B0，核心结构还不够稳。
+如果直接堆模块，就无法判断到底是三头有效，还是模块偶然有效。
+```
+
+### 下一步优先实验：Ours-B
+
+建议下一步训练：
+
+```text
+Ours-B: CLCS-Net + component-aware auxiliary branch
+```
+
+目标：
+
+```text
+救 brown spot
+继续提升 alternaria / gray spot
+增强小病斑连通域和边界定位
+```
+
+Ours-B 不改变主输出，仍然是：
+
+```text
+leaf head
+lesion head
+disease type head
+compositional fusion
+```
+
+只是在 decoder feature 上增加组件感知辅助监督：
+
+```text
+lesion boundary map
+lesion distance transform / center heatmap
+connected lesion region awareness
+```
+
+推荐先实现最稳的版本：
+
+```text
+Ours-B1: 三头组合 + lesion boundary auxiliary head
+```
+
+不要一开始就同时加 boundary、distance、copy-paste。先用 boundary，因为它最容易从 mask 自动生成，解释也清楚。
+
+### Ours-B1 训练设计
+
+模型：
+
+```text
+DeepLabV3+ + EfficientNet-B4
+leaf / lesion / disease type 三头组合
++ boundary auxiliary head
+```
+
+loss：
+
+```text
+L = L_final
+  + 0.4 * L_leaf
+  + 0.8 * L_lesion
+  + 0.6 * L_disease
+  + 0.3 * L_boundary
+```
+
+其中 boundary target 由 mask 自动生成：
+
+```text
+lesion mask = class in {rust, alternaria, gray, brown}
+boundary = lesion mask - eroded lesion mask
+```
+
+训练设置保持和 Ours-A 一致：
+
+```text
+backbone: EfficientNet-B4
+input shape: 256 x 256
+epochs: 150
+freeze epochs: 50
+freeze batch size: 4
+unfreeze batch size: 2
+optimizer: SGD
+lr: 0.001
+seed: 11
+```
+
+### Ours-B1 需要重点观察
+
+如果 Ours-B1 成功，应该看到：
+
+```text
+overall mIoU > 65.68%
+foreground mIoU > 60.18%
+alternaria IoU > 48.70%
+gray spot IoU > 49.06%
+brown spot IoU 回升，最好 > 44.38%
+```
+
+如果 brown spot 仍然下降，则说明三头组合对 disease type head 的类别区分不够，需要下一步做：
+
+```text
+Ours-B2: 三头组合 + disease-type class-balanced loss
+```
+
+### 推荐后续顺序
+
+```text
+1. Ours-B1: 三头 + lesion boundary auxiliary head
+2. 如果 brown spot 仍差，做 Ours-B2: 三头 + disease-type class-balanced loss
+3. 如果小病斑边界仍差，做 Ours-C: 三头 + boundary + distance transform
+4. 最后再做 Ours-D: severity-controlled lesion copy-paste
+5. 等 Ours-B/Ours-C 稳定后，再跑 SegNeXt / U-Net / PSPNet 外部模型对比
+```
+
+当前最合理的下一步不是追求“复杂”，而是把 Ours-A 中暴露的问题修正：
+
+```text
+三头结构提高了部分病斑类，但 brown spot 掉了。
+下一步要让模型更关注病斑组件边界和小区域完整性。
+```
+## 2026-06-02 启动 Ours-B1 边界辅助训练
+
+在 Ours-A 三头组合基础上，已启动下一步：
+
+```text
+Ours-B1: CLCS-Net + lesion boundary auxiliary head
+```
+
+目的：
+
+```text
+1. 保持 leaf / lesion / disease type 三头组合不变
+2. 在 decoder feature 上增加 boundary head
+3. 用 lesion mask 自动生成 boundary target
+4. 强化小病斑边界和连通区域学习
+5. 重点观察 brown spot 是否回升
+```
+
+边界标签生成：
+
+```text
+lesion mask = class in {rust, alternaria_leaf_spot, gray_spot, brown_spot}
+boundary = lesion mask - eroded(lesion mask)
+```
+
+loss：
+
+```text
+L = L_final
+  + 0.4 * L_leaf
+  + 0.8 * L_lesion
+  + 0.6 * L_disease
+  + 0.3 * L_boundary
+```
+
+训练设置：
+
+```text
+backbone: EfficientNet-B4
+input shape: 256 x 256
+epochs: 150
+freeze epochs: 50
+freeze batch size: 4
+unfreeze batch size: 2
+optimizer: SGD
+initial lr: 0.001
+seed: 11
+boundary weight: 0.3
+boundary positive weight: 5.0
+```
+
+输出目录：
+
+```text
+D:\Code\ATLDSD\outputs\atldsd\clcs_boundary_deeplabv3plus_efficientnet_b4_150
+```
+
+启动 PID：
+
+```text
+30280
+```
+
+需要超过的 Ours-A 指标：
+
+```text
+overall mIoU > 65.68%
+foreground mIoU > 60.18%
+alternaria IoU > 48.70%
+gray spot IoU > 49.06%
+brown spot IoU 回升，最好 > 44.38%
+```
+
+代码改动：
+
+```text
+D:\Code\ATLDSD\src\atldsd_seg\models\clcs_deeplabv3plus.py
+D:\Code\ATLDSD\src\atldsd_seg\losses\compositional.py
+D:\Code\ATLDSD\src\atldsd_seg\engine\train_clcs.py
+D:\Code\ATLDSD\scripts\run_atldsd_clcs_boundary_b4_150.ps1
+```
+## 2026-06-03 启动 Ours-B2 疾病类别加权训练
+
+在 Ours-A 三头组合基础上，已启动：
+
+```text
+Ours-B2: CLCS-Net + disease-type class-balanced loss
+```
+
+这次不叠加 boundary head，目的是单独验证：
+
+```text
+disease type head 加类别权重后，brown spot 是否能回升。
+```
+
+模型结构：
+
+```text
+DeepLabV3+ + EfficientNet-B4
+leaf head
+lesion head
+disease type head
+compositional fusion
+```
+
+loss：
+
+```text
+L = L_final
+  + 0.4 * L_leaf
+  + 0.8 * L_lesion
+  + 0.6 * L_disease_balanced
+```
+
+disease class weights：
+
+```text
+rust:       1.0
+alternaria: 1.5
+gray:       1.5
+brown:      2.0
+```
+
+训练设置：
+
+```text
+backbone: EfficientNet-B4
+input shape: 256 x 256
+epochs: 150
+freeze epochs: 50
+freeze batch size: 4
+unfreeze batch size: 2
+optimizer: SGD
+initial lr: 0.001
+seed: 11
+```
+
+输出目录：
+
+```text
+D:\Code\ATLDSD\outputs\atldsd\clcs_disease_balanced_deeplabv3plus_efficientnet_b4_150
+```
+
+启动 PID：
+
+```text
+29292
+```
+
+需要超过的目标：
+
+```text
+overall mIoU > 65.87%
+foreground mIoU > 60.20%
+brown spot IoU > 44.38%
+alternaria IoU 不低于 49%
+gray spot IoU 不低于 46%
+```
+
+当前判断：
+
+```text
+Ours-B1 边界辅助只把 brown spot 从 37.79% 拉到 39.69%，仍低于 B0 的 44.38%。
+因此下一步重点不是边界，而是 disease type head 的类别不均衡和类别混淆。
+```
+
+代码改动：
+
+```text
+D:\Code\ATLDSD\src\atldsd_seg\losses\compositional.py
+D:\Code\ATLDSD\src\atldsd_seg\engine\train_clcs.py
+D:\Code\ATLDSD\scripts\run_atldsd_clcs_disease_balanced_b4_150.ps1
+```
+## 2026-06-03 Ours-B2 当前训练进度
+
+实验：
+
+```text
+Ours-B2: CLCS-Net + disease-type class-balanced loss
+```
+
+当前状态：
+
+```text
+PID: 29292
+状态: 正在训练
+当前进度: Epoch 54 / 150
+输出目录: D:\Code\ATLDSD\outputs\atldsd\clcs_disease_balanced_deeplabv3plus_efficientnet_b4_150
+```
+
+当前每 10 轮验证结果：
+
+```text
+Epoch 10:
+Train Loss 0.452
+Val Loss   0.411
+mIoU       51.17
+mPA        57.95
+Accuracy   92.93
+
+Epoch 20:
+Train Loss 0.315
+Val Loss   0.512
+mIoU       53.57
+mPA        59.63
+Accuracy   93.21
+
+Epoch 30:
+Train Loss 0.274
+Val Loss   0.418
+mIoU       58.83
+mPA        66.08
+Accuracy   94.86
+
+Epoch 40:
+Train Loss 0.264
+Val Loss   0.321
+mIoU       54.75
+mPA        61.73
+Accuracy   94.52
+
+Epoch 50:
+Train Loss 0.217
+Val Loss   0.361
+```
+
+当前判断：
+
+```text
+Ours-B2 目前还没有接近 Ours-A / Ours-B1 的 65% mIoU。
+当前最好 mIoU 暂时是 58.83%，出现在 Epoch 30。
+第 50 轮后刚进入 unfreeze 阶段，loss 和 mIoU 波动是正常现象。
+现在不能下结论，需要继续观察 Epoch 80、100、120 后的表现。
+```
+
+这轮训练要验证的问题：
+
+```text
+disease type head 加类别权重后，brown spot 是否能从 Ours-A 的 37.79% / Ours-B1 的 39.69% 回升到 B0 的 44.38% 以上。
+```
+
+如果后续 mIoU 仍然上不去，说明简单 disease class weight 不够，下一步不应继续调小权重，而应考虑：
+
+```text
+1. disease head 使用 pixel-level class-balanced CE + lesion-only Dice
+2. brown spot 采样增强
+3. severity-controlled lesion copy-paste
+```
+## 2026-06-03 已完成训练总记录
+
+本节统一记录目前已经跑完的 ATLDSD 语义分割训练，后续写论文表格、消融实验和对比实验时优先以这里为准。
+
+### 数据集与统一设置
+
+```text
+数据集: ATLDSD / Apple Tree Leaf Disease Segmentation Dataset
+格式: VOC
+路径: D:\dataset\ATLDSD\VOCdevkit\VOC2012
+类别:
+0 background
+1 leaf
+2 rust
+3 alternaria_leaf_spot
+4 gray_spot
+5 brown_spot
+
+训练划分: train 1148
+验证划分: val 246
+测试划分: test 247
+主要评价集: val
+主要指标: mIoU, mDice, pixel accuracy, foreground mIoU, per-class IoU
+```
+
+### 已完成实验汇总
+
+| 编号 | 实验 | Backbone | 结构 | 最佳 mIoU | FG mIoU | 结论 |
+|---|---|---|---|---:|---:|---|
+| B0-M | DeepLabV3+ MobileNetV2 | MobileNetV2 | 普通 6 类 softmax | 69.36 | 63.66 | 当前最强 baseline |
+| B0-B4 | DeepLabV3+ EfficientNet-B4 | EfficientNet-B4 | 普通 6 类 softmax | 65.59 | 59.59 | B4 并没有超过 MobileNetV2 |
+| Ours-A | CLCS 三头组合 | EfficientNet-B4 | leaf / lesion / disease 三头组合 | 65.68 | 60.18 | 相比 B4 baseline 小幅提升 |
+| Ours-B1 | CLCS + boundary | EfficientNet-B4 | 三头组合 + 病斑边界辅助头 | 65.87 | 60.20 | B4 系列当前最好，但提升仍小 |
+| Ours-B2 | CLCS + disease class-balanced loss | EfficientNet-B4 | 三头组合 + 病害类别加权 | 64.79 | 59.07 | 失败，不建议作为主模块 |
+
+### B0-M: DeepLabV3+ + MobileNetV2
+
+```text
+输出目录:
+D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenet_150
+
+最终/最佳结果:
+mIoU: 69.36%
+mDice: 79.60%
+Pixel Accuracy: 98.00%
+Foreground mIoU: 63.66%
+Params: 5.81M
+FLOPs: 13.23G
+FPS: 104.32
+```
+
+判断：
+
+```text
+这是目前所有实验里最强的一条线。
+它说明 ATLDSD 上轻量 backbone 不一定弱，MobileNetV2 反而比 B4 更稳。
+后续主方法如果不能超过 69.36%，论文主张会比较危险。
+```
+
+### B0-B4: DeepLabV3+ + EfficientNet-B4
+
+```text
+输出目录:
+D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_efficientnet_b4_150
+
+Epoch 150 val:
+mIoU: 65.59%
+mDice: 77.00%
+Pixel Accuracy: 96.44%
+Foreground mIoU: 59.59%
+Params: 32.48M
+FLOPs: 51.30G
+FPS: 52.77
+```
+
+逐类 IoU：
+
+```text
+background: 95.57%
+leaf: 89.96%
+rust: 76.34%
+alternaria_leaf_spot: 42.08%
+gray_spot: 45.19%
+brown_spot: 44.38%
+```
+
+判断：
+
+```text
+B4 计算量更大，但效果低于 MobileNetV2。
+因此后续不能默认 B4 是更强 backbone。
+B4 可以保留为消融线，但主线需要补 MobileNetV2 版本的 CLCS。
+```
+
+### Ours-A: CLCS 三头组合
+
+```text
+输出目录:
+D:\Code\ATLDSD\outputs\atldsd\clcs_deeplabv3plus_efficientnet_b4_150
+
+结构:
+Head 1: leaf mask
+Head 2: lesion mask
+Head 3: disease type mask
+最后组合为 6 类输出
+
+最佳权重:
+weights\best_miou_epoch_weights.pth
+
+最佳 mIoU epoch:
+Epoch 120
+
+最佳结果:
+mIoU: 65.68%
+mDice: 77.27%
+Foreground mIoU: 60.18%
+Pixel Accuracy: 94.91%
+Val Loss: 0.264
+```
+
+逐类 IoU：
+
+```text
+background: 93.22%
+leaf: 86.20%
+rust: 79.13%
+alternaria_leaf_spot: 48.70%
+gray_spot: 49.06%
+brown_spot: 37.79%
+```
+
+相对 B0-B4：
+
+```text
+mIoU: +0.09%
+mDice: +0.27%
+Foreground mIoU: +0.59%
+rust: +2.79%
+alternaria_leaf_spot: +6.62%
+gray_spot: +3.87%
+brown_spot: -6.59%
+```
+
+判断：
+
+```text
+三头组合有一点信号，尤其对 rust / alternaria / gray 有帮助。
+但 brown_spot 明显下降，导致整体提升很小。
+单独把 CLCS 作为主创新，目前证据还不够。
+```
+
+### Ours-B1: CLCS + 病斑边界辅助头
+
+```text
+输出目录:
+D:\Code\ATLDSD\outputs\atldsd\clcs_boundary_deeplabv3plus_efficientnet_b4_150
+
+结构:
+CLCS 三头组合
++ lesion boundary auxiliary head
+
+loss:
+final loss
++ 0.4 leaf loss
++ 0.8 lesion loss
++ 0.6 disease loss
++ 0.3 boundary loss
+
+boundary_pos_weight: 5.0
+
+最佳权重:
+weights\best_miou_epoch_weights.pth
+```
+
+最佳结果：
+
+```text
+mIoU: 65.87%
+mDice: 77.38%
+Foreground mIoU: 60.20%
+Foreground mDice: 73.45%
+Pixel Accuracy: 95.56%
+Val Loss: 0.2788
+```
+
+逐类 IoU：
+
+```text
+background: 94.26%
+leaf: 87.65%
+rust: 77.98%
+alternaria_leaf_spot: 49.33%
+gray_spot: 46.33%
+brown_spot: 39.69%
+```
+
+判断：
+
+```text
+这是 B4 系列目前最好的模型。
+相比 Ours-A，mIoU 从 65.68% 到 65.87%，提升只有 0.19%。
+brown_spot 从 37.79% 回升到 39.69%，但仍低于普通 B4 baseline 的 44.38%。
+边界辅助头可以保留为消融模块，但不能单独支撑强创新。
+```
+
+### Ours-B2: CLCS + disease class-balanced loss
+
+```text
+输出目录:
+D:\Code\ATLDSD\outputs\atldsd\clcs_disease_balanced_deeplabv3plus_efficientnet_b4_150
+
+结构:
+CLCS 三头组合
++ disease head 类别加权交叉熵
+
+disease weights:
+rust: 1.0
+alternaria_leaf_spot: 1.5
+gray_spot: 1.5
+brown_spot: 2.0
+
+训练状态:
+150 / 150 已完成
+
+最佳权重:
+weights\best_miou_epoch_weights.pth
+```
+
+最佳结果：
+
+```text
+mIoU: 64.79%
+mDice: 76.49%
+Foreground mIoU: 59.07%
+Pixel Accuracy: 95.03%
+Val Loss: 0.2654
+```
+
+逐类 IoU：
+
+```text
+background: 93.41%
+leaf: 86.47%
+rust: 76.65%
+alternaria_leaf_spot: 48.10%
+gray_spot: 48.44%
+brown_spot: 35.67%
+```
+
+Epoch 150 结果：
+
+```text
+mIoU: 62.36%
+mPA: 69.31%
+Accuracy: 96.08%
+Train Loss: 0.148
+Val Loss: 0.234
+```
+
+判断：
+
+```text
+类别加权 loss 没有解决 brown_spot 问题，反而使整体 mIoU 低于 Ours-A 和 Ours-B1。
+这个实验可以写进消融表作为负结果，但不建议作为最终方法的一部分。
+后续不应继续盲目调 disease class weight。
+```
+
+### 当前总体结论
+
+```text
+1. MobileNetV2 baseline 是当前最强模型，mIoU 69.36%。
+2. B4 baseline 和 B4-CLCS 系列都没有超过 MobileNetV2 baseline。
+3. CLCS 三头组合在 B4 上有弱正收益，但收益太小。
+4. boundary head 有轻微提升，是目前 B4 系列最好的消融模块。
+5. disease class-balanced loss 失败，不能作为主线。
+6. 当前最大问题不是网络不够复杂，而是小病斑、轻症样本、brown_spot 类别难学。
+```
+
+### 重新制定后的训练策略
+
+下一步优先训练：
+
+```text
+Ours-A-M:
+DeepLabV3+ MobileNetV2 + CLCS 三头组合
+
+目的:
+判断 CLCS 三头结构能否在当前最强 baseline MobileNetV2 上继续提升。
+
+关键对比:
+B0-M MobileNetV2 baseline: 69.36% mIoU
+```
+
+如果 Ours-A-M 超过 69.36%：
+
+```text
+说明三头组合结构有效。
+继续训练 Ours-B1-M: MobileNetV2 + CLCS + boundary head。
+```
+
+如果 Ours-A-M 仍低于 69.36%：
+
+```text
+说明三头结构单独不够强。
+主创新需要转向 severity-controlled lesion copy-paste。
+CLCS 作为结构辅助模块，而不是唯一主创新。
+```
+
+后续更值得做的实验：
+
+```text
+Ours-C:
+CLCS + severity-controlled lesion copy-paste
+
+原因:
+ATLDSD 的主要难点是小病斑、轻症样本和 brown_spot 不稳定。
+Copy-Paste 能直接增加病斑区域，尤其适合病斑连通域较小、类别不均衡的情况。
+```
+## 2026-06-03 MobileNetV3-Large baseline 完成
+
+本次训练目的：
+
+```text
+验证 MobileNetV3-Large 是否可以替代 MobileNetV2，作为后续论文主线的轻量 backbone。
+```
+
+### 实验配置
+
+```text
+实验编号: B0-V3
+模型: DeepLabV3+
+Backbone: MobileNetV3-Large
+输出类别: 6
+输入尺寸: 256 x 256
+训练轮数: 150
+训练集: 1148
+验证集: 246
+预训练: torchvision ImageNet pretrained MobileNetV3-Large
+输出目录:
+D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_150
+```
+
+相关代码改动：
+
+```text
+D:\Code\ATLDSD\src\models\deeplabv3plus\nets\backbone_registry.py
+D:\Code\ATLDSD\src\atldsd_seg\configs\experiments.py
+D:\Code\ATLDSD\scripts\run_atldsd_experiment.ps1
+D:\Code\ATLDSD\scripts\run_atldsd_deeplabv3plus_mobilenetv3_large_150.ps1
+```
+
+前向验证：
+
+```text
+输出: 1 x 6 x 256 x 256
+低层特征: 1 x 24 x 64 x 64
+高层特征: 1 x 960 x 16 x 16
+```
+
+### 最终结果
+
+注意：
+
+```text
+auto-export 的 reports\best_val 是按 best val-loss 权重导出的，不是 best mIoU。
+论文表格应使用 ep150_val 报告。
+```
+
+论文可用报告：
+
+```text
+D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_150\reports\ep150_val
+```
+
+第 150 轮验证集结果：
+
+```text
+mIoU: 71.72%
+mDice: 81.99%
+Pixel Accuracy: 97.76%
+Foreground mIoU: 66.58%
+Params: 11.73M
+FLOPs: 15.28G
+FPS: 98.80
+```
+
+逐类 IoU：
+
+```text
+background: 97.43%
+leaf: 93.50%
+rust: 81.23%
+alternaria_leaf_spot: 52.88%
+gray_spot: 56.88%
+brown_spot: 48.42%
+```
+
+### 与之前 baseline 对比
+
+```text
+DeepLabV3+ MobileNetV2:
+mIoU 69.36%
+FG mIoU 63.66%
+Params 5.81M
+FLOPs 13.23G
+FPS 104.32
+
+DeepLabV3+ MobileNetV3-Large:
+mIoU 71.72%
+FG mIoU 66.58%
+Params 11.73M
+FLOPs 15.28G
+FPS 98.80
+```
+
+结论：
+
+```text
+MobileNetV3-Large 比 MobileNetV2 提升 2.36% mIoU。
+虽然参数量增加到 11.73M，但仍然属于轻量 backbone，速度也接近 100 FPS。
+因此后续论文主 baseline 应从 MobileNetV2 切换为 MobileNetV3-Large。
+```
+
+### 目前训练总排名
+
+| 编号 | 实验 | Backbone | mIoU | FG mIoU | 结论 |
+|---|---|---|---:|---:|---|
+| B0-V3 | DeepLabV3+ | MobileNetV3-Large | 71.72 | 66.58 | 当前最强 baseline |
+| B0-M | DeepLabV3+ | MobileNetV2 | 69.36 | 63.66 | 旧轻量 baseline |
+| Ours-B1 | CLCS + boundary | EfficientNet-B4 | 65.87 | 60.20 | B4 系列最好 |
+| Ours-A | CLCS 三头 | EfficientNet-B4 | 65.68 | 60.18 | 三头弱正收益 |
+| B0-B4 | DeepLabV3+ | EfficientNet-B4 | 65.59 | 59.59 | 大 backbone 但效果一般 |
+| Ours-B2 | CLCS + 类别加权 | EfficientNet-B4 | 64.79 | 59.07 | 失败消融 |
+
+### 后续策略更新
+
+下一步应训练：
+
+```text
+Ours-A-V3:
+DeepLabV3+ MobileNetV3-Large + CLCS 三头组合
+```
+
+目的：
+
+```text
+验证 CLCS 三头组合在当前最强 backbone MobileNetV3-Large 上是否仍然有效。
+关键对比线是 B0-V3 的 71.72% mIoU。
+```
+
+如果 Ours-A-V3 超过 71.72%：
+
+```text
+说明 leaf / lesion / disease type 三头组合在强 backbone 上也有效。
+继续训练 Ours-B1-V3: CLCS + boundary head。
+```
+
+如果 Ours-A-V3 低于 71.72%：
+
+```text
+说明三头组合本身不是主要增益来源。
+主创新应转向 severity-controlled lesion copy-paste 或更强的数据增强策略。
+```
+
+论文写法建议：
+
+```text
+MobileNetV3-Large was adopted as the lightweight encoder backbone due to its favorable balance between segmentation accuracy and computational efficiency.
+```
+## 2026-06-03 重新规划训练计划：以 MobileNetV3-Large 为主线
+
+本节基于目前所有已完成训练重新制定后续实验路线。
+
+### 当前事实判断
+
+目前最重要的实验事实：
+
+```text
+B0-V3: DeepLabV3+ + MobileNetV3-Large
+mIoU: 71.72%
+FG mIoU: 66.58%
+Params: 11.73M
+FLOPs: 15.28G
+FPS: 98.80
+
+B0-M: DeepLabV3+ + MobileNetV2
+mIoU: 69.36%
+FG mIoU: 63.66%
+
+B0-B4: DeepLabV3+ + EfficientNet-B4
+mIoU: 65.59%
+FG mIoU: 59.59%
+
+Ours-B1: CLCS + boundary + EfficientNet-B4
+mIoU: 65.87%
+FG mIoU: 60.20%
+```
+
+结论：
+
+```text
+1. MobileNetV3-Large 已经成为当前最强 baseline。
+2. B4 线整体不再适合作为论文主线，只适合作为 backbone 对比或历史消融。
+3. MobileNetV2 虽然效果不错，但论文观感偏旧，后续只作为 lightweight historical baseline。
+4. 后续所有主方法必须优先围绕 MobileNetV3-Large 做。
+```
+
+### 总体策略
+
+新的论文训练主线：
+
+```text
+DeepLabV3+ MobileNetV3-Large baseline
+-> CLCS 三头组合
+-> CLCS + boundary auxiliary head
+-> CLCS + severity-controlled lesion copy-paste
+```
+
+核心问题：
+
+```text
+CLCS 三头组合是否能在当前最强 backbone 上超过 71.72% mIoU？
+```
+
+如果不能超过，说明三头结构不是主要增益来源，论文主创新应转向：
+
+```text
+severity-controlled lesion synthesis / lesion copy-paste
+```
+
+### 第一阶段：补齐 MobileNetV3-Large 的 CLCS 消融
+
+#### 实验 1: Ours-A-V3
+
+```text
+实验名:
+clcs_deeplabv3plus_mobilenetv3_large_150
+
+模型:
+DeepLabV3+ + MobileNetV3-Large + CLCS 三头组合
+
+结构:
+Head 1: leaf mask
+Head 2: lesion mask
+Head 3: disease type mask
+组合输出 6 类 segmentation
+
+对比对象:
+B0-V3: DeepLabV3+ + MobileNetV3-Large, mIoU 71.72%
+```
+
+目标：
+
+```text
+最低目标: mIoU >= 71.72%
+可接受目标: mIoU >= 72.0%
+理想目标: mIoU >= 72.5%
+
+重点观察:
+alternaria_leaf_spot 是否高于 52.88%
+gray_spot 是否高于 56.88%
+brown_spot 是否高于 48.42%
+```
+
+判断：
+
+```text
+如果 Ours-A-V3 超过 71.72%，说明 CLCS 三头组合在强 backbone 上成立。
+如果 Ours-A-V3 低于 71.72%，CLCS 不能作为单独主创新，只能作为辅助结构或负消融。
+```
+
+#### 实验 2: Ours-B1-V3
+
+```text
+实验名:
+clcs_boundary_deeplabv3plus_mobilenetv3_large_150
+
+模型:
+DeepLabV3+ + MobileNetV3-Large + CLCS 三头组合 + lesion boundary head
+
+对比对象:
+Ours-A-V3
+B0-V3
+```
+
+目标：
+
+```text
+最低目标: 高于 Ours-A-V3
+可接受目标: mIoU >= 72.2%
+理想目标: mIoU >= 72.8%
+
+重点观察:
+brown_spot IoU 是否继续升高
+病斑边界类的可视化是否更完整
+```
+
+判断：
+
+```text
+如果 boundary head 只提升小于 0.2%，它只能作为弱消融。
+如果提升超过 0.5%，可以保留为组件感知辅助分支。
+```
+
+### 第二阶段：真正冲指标的病斑合成增强
+
+#### 实验 3: Ours-C-V3
+
+```text
+实验名:
+clcs_lesion_copypaste_deeplabv3plus_mobilenetv3_large_150
+
+模型:
+DeepLabV3+ + MobileNetV3-Large + CLCS + severity-controlled lesion copy-paste
+```
+
+增强逻辑：
+
+```text
+1. 从训练 mask 中提取 lesion connected components。
+2. 保留 disease class。
+3. 只允许贴到 leaf mask 内部。
+4. 自动更新 6 类 mask。
+5. 根据 lesion_area / leaf_area 控制 low / medium / high severity。
+6. 优先增强 brown_spot、gray_spot、alternaria_leaf_spot。
+```
+
+为什么这一步最重要：
+
+```text
+目前 ATLDSD 的主要瓶颈不是 backbone，而是小病斑、轻症样本和少数病害类别。
+单纯 disease class weight 已经失败，说明只改 loss 不够。
+Copy-Paste 可以直接增加病斑像素和病斑形态多样性，更符合数据问题。
+```
+
+目标：
+
+```text
+最低目标: mIoU >= 72.5%
+可接受目标: mIoU >= 73.0%
+理想目标: mIoU >= 74.0%
+
+重点目标:
+brown_spot IoU > 52%
+gray_spot IoU > 58%
+alternaria_leaf_spot IoU > 55%
+```
+
+判断：
+
+```text
+如果 Copy-Paste 有明显收益，它应该成为论文主创新之一。
+如果 Copy-Paste 对 mIoU 提升不大，但小病斑类别提升明显，也可以作为 disease severity estimation 的支撑实验。
+```
+
+### 第三阶段：组合最终模型
+
+只有在前面模块分别有效时，才训练最终组合：
+
+```text
+Final-V3:
+MobileNetV3-Large + CLCS + boundary head + severity-controlled lesion copy-paste
+```
+
+不要一开始就堆所有模块。
+
+原因：
+
+```text
+如果直接堆模块，即使指标提升，也无法说明到底是哪一部分有效。
+SCI 论文更需要清晰消融，而不是把所有东西混在一起。
+```
+
+最终模型目标：
+
+```text
+mIoU: 73% 以上
+FG mIoU: 68% 以上
+brown_spot IoU: 52% 以上
+FPS: 尽量保持 80 以上
+```
+
+### 第四阶段：对比实验
+
+在主方法稳定后再补对比模型，不要现在到处开训练。
+
+推荐对比表：
+
+```text
+1. UNet
+2. UNet++
+3. PSPNet
+4. DeepLabV3+ EfficientNet-B4
+5. DeepLabV3+ MobileNetV2
+6. DeepLabV3+ MobileNetV3-Large
+7. SegNeXt
+8. Ours
+```
+
+其中重点：
+
+```text
+SegNeXt 必须加入，因为它是近年较新的分割结构，对论文说服力有帮助。
+MobileNetV3-Large baseline 必须作为核心 baseline，因为它当前最强。
+B4 不再作为主 baseline，只作为大 backbone 对比。
+```
+
+### 第五阶段：最终测试集
+
+目前所有主要数字都来自 val：
+
+```text
+val images: 246
+```
+
+论文最终结果应在方法确定后再跑 test：
+
+```text
+test images: 247
+```
+
+原则：
+
+```text
+val 用来调策略和做消融。
+test 只在最终方法确定后使用，避免把 test 当验证集反复调。
+```
+
+最终需要输出：
+
+```text
+val ablation table
+test final comparison table
+per-class IoU table
+complexity table: Params / FLOPs / FPS
+severity estimation error table: lesion_area / leaf_area
+visualization figure: image / GT / baseline / ours
+```
+
+### 当前下一步执行顺序
+
+立即下一步：
+
+```text
+1. 新建 MobileNetV3-Large 版 CLCS 训练脚本。
+2. 跑 Ours-A-V3 150 epoch。
+3. 导出 ep150_val 和 best_miou_val 两套报告。
+4. 与 B0-V3 的 71.72% 做对比。
+```
+
+如果 Ours-A-V3 成功：
+
+```text
+继续 Ours-B1-V3: CLCS + boundary head。
+```
+
+如果 Ours-A-V3 失败：
+
+```text
+暂停 boundary-V3。
+优先实现 severity-controlled lesion copy-paste。
+```
+
+当前不建议做：
+
+```text
+1. 不建议继续调 B4。
+2. 不建议继续调 disease class weight。
+3. 不建议马上堆注意力模块。
+4. 不建议同时开太多对比模型，先把主线跑通。
+```
+
+### 论文主线暂定
+
+如果后续实验成功，论文主线可以写成：
+
+```text
+CLCS-Net with Severity-Controlled Lesion Synthesis for Apple Leaf Disease Severity Segmentation
+```
+
+中文理解：
+
+```text
+不是单纯换 backbone。
+不是简单加 attention。
+而是：
+1. 用 MobileNetV3-Large 建立强轻量 baseline；
+2. 用 leaf / lesion / disease 三头组合表达叶片-病斑结构；
+3. 用 boundary 或 component-aware 分支增强小病斑边界；
+4. 用 severity-controlled copy-paste 解决轻症和小病斑不足。
+```
+## 2026-06-04 Ours-A-V3 训练完成：CLCS 三头在 MobileNetV3-Large 上失败
+
+本次训练目的：
+
+```text
+验证 CLCS leaf / lesion / disease 三头组合结构，是否能在当前最强 backbone MobileNetV3-Large 上超过普通 6 类 softmax baseline。
+```
+
+### 实验配置
+
+```text
+实验编号: Ours-A-V3
+模型: DeepLabV3+ + MobileNetV3-Large + CLCS 三头组合
+Backbone: MobileNetV3-Large
+输入尺寸: 256 x 256
+训练轮数: 150
+训练集: 1148
+验证集: 246
+输出目录:
+D:\Code\ATLDSD\outputs\atldsd\clcs_deeplabv3plus_mobilenetv3_large_150
+```
+
+新增训练脚本：
+
+```text
+D:\Code\ATLDSD\scripts\run_atldsd_clcs_mobilenetv3_large_150.ps1
+```
+
+前向验证：
+
+```text
+final_logits:   1 x 6 x 256 x 256
+leaf_logits:    1 x 2 x 256 x 256
+lesion_logits:  1 x 2 x 256 x 256
+disease_logits: 1 x 4 x 256 x 256
+```
+
+### 最佳结果
+
+最佳权重：
+
+```text
+D:\Code\ATLDSD\outputs\atldsd\clcs_deeplabv3plus_mobilenetv3_large_150\weights\best_miou_epoch_weights.pth
+```
+
+最佳报告：
+
+```text
+D:\Code\ATLDSD\outputs\atldsd\clcs_deeplabv3plus_mobilenetv3_large_150\reports\best_miou_val
+```
+
+最佳验证集结果：
+
+```text
+mIoU: 70.50%
+mDice: 80.70%
+Pixel Accuracy: 97.97%
+Foreground mIoU: 65.05%
+Val Loss: 0.126
+```
+
+逐类 IoU：
+
+```text
+background: 97.76%
+leaf: 93.98%
+rust: 82.28%
+alternaria_leaf_spot: 51.17%
+gray_spot: 57.66%
+brown_spot: 40.17%
+```
+
+第 150 轮结果：
+
+```text
+mIoU: 68.75%
+mDice: 78.86%
+Pixel Accuracy: 97.92%
+Foreground mIoU: 62.95%
+Val Loss: 0.156
+```
+
+第 150 轮逐类 IoU：
+
+```text
+background: 97.72%
+leaf: 93.86%
+rust: 82.58%
+alternaria_leaf_spot: 47.68%
+gray_spot: 58.54%
+brown_spot: 32.11%
+```
+
+### 与 B0-V3 baseline 对比
+
+当前最强 baseline：
+
+```text
+B0-V3:
+DeepLabV3+ + MobileNetV3-Large
+mIoU: 71.72%
+Foreground mIoU: 66.58%
+brown_spot IoU: 48.42%
+```
+
+Ours-A-V3：
+
+```text
+mIoU: 70.50%
+Foreground mIoU: 65.05%
+brown_spot IoU: 40.17%
+```
+
+差值：
+
+```text
+mIoU: -1.22%
+Foreground mIoU: -1.53%
+brown_spot IoU: -8.25%
+```
+
+### 结论
+
+```text
+CLCS 三头组合在 MobileNetV3-Large 上没有超过普通 6 类 softmax baseline。
+主要失败点是 brown_spot，IoU 从 B0-V3 的 48.42% 降到 40.17%。
+因此 CLCS 三头组合不能作为当前论文主创新继续硬推。
+```
+
+具体判断：
+
+```text
+1. CLCS 在 B4 上只有很弱正收益。
+2. CLCS 在更强的 MobileNetV3-Large 上反而下降。
+3. 这说明三头组合不是当前数据集上最主要的增益来源。
+4. 后续不建议马上继续训练 Ours-B1-V3: CLCS + boundary head。
+5. 更应该转向数据层面的病斑增强。
+```
+
+### 后续策略调整
+
+下一步优先做：
+
+```text
+Ours-C-V3:
+DeepLabV3+ + MobileNetV3-Large + severity-controlled lesion copy-paste
+```
+
+目的：
+
+```text
+解决 ATLDSD 中小病斑、轻症样本和 brown_spot 表现弱的问题。
+```
+
+为什么不继续 boundary-V3：
+
+```text
+CLCS-A-V3 已经低于 baseline。
+如果继续在失败的三头结构上加 boundary，很可能只是继续补救结构缺陷，而不是解决主问题。
+```
+
+为什么转向 copy-paste：
+
+```text
+disease class-balanced loss 已经失败，说明单纯调 loss 不够。
+当前 brown_spot 的问题更像样本不足、病斑形态不足、小区域学习不足。
+Severity-controlled lesion copy-paste 能直接增加病斑像素和轻症/中症样本。
+```
+
+新的短期训练路线：
+
+```text
+1. 实现 severity-controlled lesion copy-paste 数据增强。
+2. 先跑普通 DeepLabV3+ MobileNetV3-Large + copy-paste。
+3. 与 B0-V3 的 71.72% 对比。
+4. 如果 copy-paste 有收益，再考虑是否把 CLCS 作为辅助结构重新加入。
+```
+
+当前不建议：
+
+```text
+1. 不建议继续跑 CLCS + boundary + MobileNetV3-Large。
+2. 不建议继续调 disease class weight。
+3. 不建议继续堆注意力模块。
+4. 不建议用 B4 作为主线。
+```
+## 2026-06-04 新整体训练计划：SCLA-Net 主线
+
+本节重新规划后续完整训练路线。原因是当前实验已经证明：
+
+```text
+1. DeepLabV3+ + MobileNetV3-Large 已经是当前最强 baseline，mIoU 71.72%。
+2. CLCS 三头组合在 MobileNetV3-Large 上下降到 70.50%，不能继续作为主创新硬推。
+3. MobileNetV3-Large 自带 SE，但 SE 是通用通道注意力，创新性弱，不足以支撑论文主张。
+4. ATLDSD 的核心难点是小病斑、轻症样本、brown_spot 弱、病斑边界不完整。
+```
+
+因此新主线不再是：
+
+```text
+换 backbone
+普通 SE / CBAM / ECA
+CLCS 三头强组合
+单纯 class weight
+```
+
+而是：
+
+```text
+SCLA-Net:
+Severity-Controlled Lesion Augmentation and Component-guided Attention Network
+
+中文:
+严重度控制病斑增强与组件引导注意力网络
+```
+
+### 总体思想
+
+新方案由四个层次组成：
+
+```text
+Base:
+DeepLabV3+ + MobileNetV3-Large
+
+Module 1:
+Severity-controlled lesion copy-paste
+
+Module 2:
+Lesion component auxiliary supervision
+
+Module 3:
+Severity-aware component-guided attention, SCA
+
+Module 4:
+Severity consistency loss
+```
+
+最终目标不是简单提高 mIoU，而是围绕论文题目形成闭环：
+
+```text
+分割病斑
+-> 计算病斑面积 / 叶片面积
+-> 判断病害严重度
+-> 用严重度反过来约束训练
+```
+
+### 当前基准线
+
+当前必须超过的核心 baseline：
+
+```text
+B0-V3:
+DeepLabV3+ + MobileNetV3-Large
+mIoU: 71.72%
+FG mIoU: 66.58%
+Accuracy: 97.76%
+brown_spot IoU: 48.42%
+gray_spot IoU: 56.88%
+alternaria_leaf_spot IoU: 52.88%
+FPS: 98.80
+Params: 11.73M
+FLOPs: 15.28G
+```
+
+失败消融：
+
+```text
+Ours-A-V3:
+MobileNetV3-Large + CLCS 三头组合
+mIoU: 70.50%
+brown_spot IoU: 40.17%
+
+结论:
+CLCS 三头组合不能作为主创新。
+```
+
+### 阶段 1：先解决数据问题
+
+#### E1: B0-V3 + Severity-controlled Lesion Copy-Paste
+
+实验名建议：
+
+```text
+deeplabv3plus_mobilenetv3_large_sclp_150
+```
+
+目的：
+
+```text
+解决小病斑、轻症样本不足、brown_spot 弱的问题。
+```
+
+方法：
+
+```text
+1. 从训练集 mask 中提取 lesion connected components。
+2. 每个病斑组件记录:
+   disease class
+   component area
+   bounding box
+   source image id
+   source severity = lesion_area / leaf_area
+3. 训练时随机选取目标 leaf 区域。
+4. 只允许把病斑贴到 leaf mask 内。
+5. 自动更新 segmentation mask。
+6. 按 low / medium / high severity 控制粘贴数量和面积。
+7. 优先采样 brown_spot、gray_spot、alternaria_leaf_spot。
+```
+
+为什么先做这个：
+
+```text
+当前不是模型完全看不懂，而是 brown_spot 和小病斑样本不够稳定。
+单纯 disease class weight 已失败，说明只改 loss 不能补数据分布。
+Copy-Paste 直接改变训练分布，最可能提升 brown_spot。
+```
+
+成功标准：
+
+```text
+最低标准:
+mIoU >= 72.20%
+brown_spot IoU >= 50.00%
+
+理想标准:
+mIoU >= 73.00%
+brown_spot IoU >= 52.00%
+FG mIoU >= 67.50%
+```
+
+如果 E1 失败：
+
+```text
+不继续加注意力。
+先检查 copy-paste 是否贴得太假、是否破坏叶片纹理、是否 severity 分布不合理。
+```
+
+### 阶段 2：再加入病斑组件辅助监督
+
+#### E2: B0-V3 + SCLP + Component Auxiliary Heads
+
+实验名建议：
+
+```text
+deeplabv3plus_mobilenetv3_large_sclp_component_150
+```
+
+目的：
+
+```text
+让模型显式学习病斑是小块、边界不规则、位于叶片内部的组件。
+```
+
+辅助监督不改变最终输出，最终推理仍然是普通 6 类 segmentation 主头。
+
+辅助头：
+
+```text
+Head A: lesion binary mask
+Head B: lesion boundary map
+Head C: lesion center / distance transform heatmap
+```
+
+伪标签来源：
+
+```text
+全部从现有 mask 自动生成，不需要额外人工标注。
+```
+
+损失函数：
+
+```text
+L_total =
+L_seg
++ lambda_lesion * L_lesion
++ lambda_boundary * L_boundary
++ lambda_center * L_center
+```
+
+建议初始权重：
+
+```text
+lambda_lesion = 0.3
+lambda_boundary = 0.2
+lambda_center = 0.1
+```
+
+成功标准：
+
+```text
+相比 E1:
+mIoU 提升 >= 0.30%
+或 brown_spot / gray_spot / alternaria 至少两个类别提升。
+```
+
+如果 E2 只提升很小：
+
+```text
+保留 component auxiliary 作为弱消融。
+不要把它作为唯一主创新。
+```
+
+### 阶段 3：加入真正有针对性的注意力
+
+#### E3: SCA Attention
+
+模块名：
+
+```text
+SCA:
+Severity-aware Component-guided Attention
+
+中文:
+严重度感知组件引导注意力
+```
+
+这个模块不是 SE、CBAM、ECA。
+
+区别：
+
+```text
+SE:
+只做通道重标定，缺少空间病斑定位。
+
+CBAM:
+通用空间+通道注意力，不知道 leaf / lesion / severity 结构。
+
+SCA:
+用 lesion component、boundary 和 severity 估计来引导 decoder 特征关注叶片内部小病斑区域。
+```
+
+输入：
+
+```text
+decoder feature F
+lesion auxiliary prediction P_lesion
+boundary auxiliary prediction P_boundary
+predicted severity scalar or severity map P_sev
+```
+
+结构建议：
+
+```text
+1. Multi-scale depthwise spatial branch:
+   DWConv 3x3
+   DWConv 5x5
+   DWConv 7x7 or dilated 3x3
+
+2. Component guidance branch:
+   concat(P_lesion, P_boundary, P_sev)
+   1x1 conv -> sigmoid attention map
+
+3. Fusion:
+   A = sigmoid(MS-DWConv(F) + ComponentGuide)
+   F_out = F + F * A
+```
+
+放置位置：
+
+```text
+DeepLabV3+ decoder 后、分类头前。
+```
+
+为什么这样放：
+
+```text
+decoder 特征已经融合了低层边界和高层语义。
+在这里做 lesion-guided attention，比在 backbone 里加通用 attention 更贴近病斑分割任务。
+```
+
+实验名建议：
+
+```text
+deeplabv3plus_mobilenetv3_large_sclp_component_sca_150
+```
+
+成功标准：
+
+```text
+相比 E2:
+mIoU 提升 >= 0.30%
+FG mIoU 提升 >= 0.30%
+brown_spot IoU 不下降
+```
+
+如果 SCA 有效：
+
+```text
+SCA 可以作为论文的核心结构创新。
+```
+
+如果 SCA 无效：
+
+```text
+保留 SCLP + component auxiliary，SCA 作为失败消融或不写入主方法。
+```
+
+### 阶段 4：加入严重度一致性约束
+
+#### E4: Severity Consistency Loss
+
+实验名建议：
+
+```text
+deeplabv3plus_mobilenetv3_large_sclp_component_sca_sevloss_150
+```
+
+目的：
+
+```text
+让模型不只分割类别，还要让预测的病害严重度与 GT 严重度一致。
+```
+
+严重度定义：
+
+```text
+GT severity = GT lesion pixels / GT leaf pixels
+Pred severity = predicted lesion probability area / predicted leaf probability area
+```
+
+损失：
+
+```text
+L_severity = SmoothL1(Pred severity, GT severity)
+```
+
+总损失：
+
+```text
+L_total =
+L_seg
++ lambda_lesion * L_lesion
++ lambda_boundary * L_boundary
++ lambda_center * L_center
++ lambda_severity * L_severity
+```
+
+建议初始权重：
+
+```text
+lambda_severity = 0.05
+```
+
+成功标准：
+
+```text
+mIoU 不下降超过 0.10%
+severity MAE 明显下降
+严重度分组 low / medium / high 的分类准确率提高
+```
+
+为什么最后再加：
+
+```text
+severity loss 太早加入可能干扰像素分割。
+先把 segmentation 和 lesion attention 做稳，再用 severity loss 做约束更合理。
+```
+
+### 阶段 5：最终模型
+
+最终模型暂定：
+
+```text
+SCLA-Net:
+MobileNetV3-Large DeepLabV3+
++ Severity-controlled lesion copy-paste
++ Component auxiliary heads
++ Severity-aware component-guided attention
++ Severity consistency loss
+```
+
+最终目标：
+
+```text
+mIoU >= 73.00%
+FG mIoU >= 68.00%
+brown_spot IoU >= 52.00%
+gray_spot IoU >= 58.00%
+alternaria_leaf_spot IoU >= 55.00%
+FPS >= 80
+```
+
+### 消融实验表设计
+
+主消融表：
+
+```text
+B0-V3
+B0-V3 + SCLP
+B0-V3 + SCLP + ComponentAux
+B0-V3 + SCLP + ComponentAux + SCA
+B0-V3 + SCLP + ComponentAux + SCA + SeverityLoss
+```
+
+负消融表：
+
+```text
+CLCS 三头组合
+disease class-balanced loss
+普通 SE / CBAM，如果有时间可补
+```
+
+注意：
+
+```text
+普通 SE / CBAM 不是必须做。
+如果要证明 SCA 不是普通注意力，可以补一个 CBAM 对比。
+但不要把 CBAM 作为主方法。
+```
+
+### 对比实验表
+
+最终对比模型：
+
+```text
+UNet
+UNet++
+PSPNet
+DeepLabV3+ EfficientNet-B4
+DeepLabV3+ MobileNetV2
+DeepLabV3+ MobileNetV3-Large
+SegNeXt
+SCLA-Net
+```
+
+SegNeXt 必须加入：
+
+```text
+因为它是较新的分割结构，可以增强论文对比说服力。
+```
+
+### 执行顺序
+
+立即执行：
+
+```text
+Step 1:
+实现 severity-controlled lesion copy-paste。
+
+Step 2:
+跑 E1: B0-V3 + SCLP 150 epoch。
+
+Step 3:
+如果 E1 超过 72.20%，实现 Component Auxiliary Heads。
+
+Step 4:
+如果 E2 有提升，实现 SCA 注意力。
+
+Step 5:
+如果 E3 有提升，加 Severity Consistency Loss。
+
+Step 6:
+最终模型确定后，只在最终阶段跑 test set。
+```
+
+当前不要做：
+
+```text
+1. 不继续堆 CLCS。
+2. 不把 SE 当创新。
+3. 不直接上最终大杂烩模型。
+4. 不先跑 test。
+5. 不同时开太多对比模型。
+```
+
+### 论文创新表达
+
+可以这样写创新点：
+
+```text
+1. A severity-controlled lesion copy-paste strategy is proposed to synthesize low-, medium-, and high-severity apple leaf disease samples while preserving leaf-region constraints.
+
+2. A component-aware auxiliary learning branch is introduced to enhance small lesion localization, boundary integrity, and lesion component representation.
+
+3. A severity-aware component-guided attention module is designed to focus decoder features on lesion-prone regions, avoiding generic channel-only attention such as SE.
+
+4. A severity consistency loss is formulated to align segmentation predictions with disease severity estimation.
+```
+
+中文概括：
+
+```text
+不是简单加注意力。
+而是围绕 ATLDSD 的叶片-病斑-严重度关系，做一个从数据增强、组件学习、注意力引导到严重度约束的完整方法。
+```
+## 2026-06-04 E1 训练启动：B0-V3 + SCLP
+
+本次训练对应新整体方案 SCLA-Net 的第一阶段。
+
+实验目的：
+
+```text
+验证 severity-controlled lesion copy-paste 是否能超过当前最强 baseline B0-V3。
+重点解决小病斑、轻症样本不足、brown_spot 弱的问题。
+```
+
+实验配置：
+
+```text
+实验编号: E1
+实验名: deeplabv3plus_mobilenetv3_large_sclp_150
+模型: DeepLabV3+ + MobileNetV3-Large
+增强: Severity-controlled lesion copy-paste, SCLP
+训练轮数: 150
+输入尺寸: 256 x 256
+训练集: 1148
+验证集: 246
+```
+
+SCLP 参数：
+
+```text
+sclp: true
+sclp_prob: 0.7
+sclp_max_components: 3
+sclp_class_weights:
+rust 1.0
+alternaria_leaf_spot 2.0
+gray_spot 2.0
+brown_spot 3.0
+```
+
+输出目录：
+
+```text
+D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_sclp_150
+```
+
+启动状态：
+
+```text
+PID: 34000
+状态: 正在训练
+当前: Epoch 1 / 150
+启动时间: 2026-06-04 10:39
+```
+
+新增/修改代码：
+
+```text
+D:\Code\ATLDSD\src\models\deeplabv3plus\utils\dataloader.py
+D:\Code\ATLDSD\src\models\deeplabv3plus\train.py
+D:\Code\ATLDSD\scripts\run_atldsd_deeplabv3plus_mobilenetv3_large_sclp_150.ps1
+```
+
+本轮成功标准：
+
+```text
+最低标准:
+mIoU >= 72.20%
+brown_spot IoU >= 50.00%
+
+理想标准:
+mIoU >= 73.00%
+brown_spot IoU >= 52.00%
+FG mIoU >= 67.50%
+```
+
+关键对比 baseline：
+
+```text
+B0-V3:
+DeepLabV3+ + MobileNetV3-Large
+mIoU: 71.72%
+FG mIoU: 66.58%
+brown_spot IoU: 48.42%
+```

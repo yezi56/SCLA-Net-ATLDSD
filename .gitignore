@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Training outputs
+outputs/
+logs/
+runs/
+checkpoints/
+*.pth
+*.pt
+*.onnx
+
+# Local datasets and generated VOC folders
+VOCdevkit/
+datasets/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
