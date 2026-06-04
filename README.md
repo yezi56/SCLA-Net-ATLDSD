@@ -82,6 +82,16 @@ chmod +x scripts/*.sh
 ./scripts/run_ubuntu.sh sclp
 ```
 
+If the server does not have `python3`, bootstrap Miniconda first:
+
+```bash
+chmod +x scripts/*.sh
+./scripts/bootstrap_ubuntu_miniconda.sh
+export PATH="$HOME/miniconda3/bin:$PATH"
+./scripts/setup_ubuntu_env.sh cu121
+./scripts/run_ubuntu.sh sclp
+```
+
 Use `cpu`, `cu118`, `cu121`, or `cu124` for the setup script according to the server CUDA driver. If PyTorch is already installed, use:
 
 ```bash
