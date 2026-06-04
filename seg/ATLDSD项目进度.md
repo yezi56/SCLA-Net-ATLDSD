@@ -4120,3 +4120,197 @@ M2 判断标准：
 如果 M2 mIoU 和 severity 都低于 E2:
   severity weight=0.1 过强或设计不合适，下一步改为 0.05 或 smooth_l1。
 ```
+
+## 2026-06-04 训练路线纠偏：主线必须回到结构模块
+
+### 问题纠正
+
+上一版计划把 M2 放得太靠前，逻辑不够硬：
+
+```text
+E2 = Component Auxiliary Heads
+这是结构模块。
+
+M2 = Severity Consistency Loss
+这是 loss 约束，不是结构模块。
+```
+
+如果论文目标是做语义分割模型创新，主线不能一直围绕 loss 和指标约束转。  
+M2 可以保留，但只能作为“严重度一致性辅助消融”，不能作为主结构创新。
+
+### 新主线定位
+
+当前论文主线重新定义为：
+
+```text
+Component-aware modular segmentation for ATLDSD disease severity assessment
+```
+
+核心不是“加一个 loss”，而是：
+
+```text
+在 DeepLabV3+ + MobileNetV3-Large 的强 baseline 上，
+围绕小病斑、边界、组件结构和注意力响应，
+逐步加入真实结构模块。
+```
+
+### 已完成实验重新归位
+
+```text
+B0-V3:
+DeepLabV3+ + MobileNetV3-Large
+作用: 最强普通 baseline
+结果: mIoU 71.72
+
+E2:
+B0-V3 + Component Auxiliary Heads
+作用: 第一个结构模块实验
+模块: lesion head + boundary head + center head
+结果: mIoU 72.11
+结论: 有小幅正收益，保留为结构主线起点。
+
+M2:
+E2 + Severity Consistency Loss
+作用: 严重度 loss 消融
+模块属性: 不是结构模块
+当前状态: 正在训练，PID 28052
+结论定位: 降级为辅助实验，不作为主线创新。
+```
+
+### 重新规划后的训练顺序
+
+第一阶段：确认结构起点
+
+```text
+S0: B0-V3
+DeepLabV3+ + MobileNetV3-Large
+目的: 普通 6 类 softmax baseline。
+状态: 已完成。
+
+S1: E2
+B0-V3 + Component Auxiliary Heads
+目的: 证明 lesion / boundary / center 辅助头是否有结构收益。
+状态: 已完成，mIoU 72.11。
+```
+
+第二阶段：真正动模块
+
+```text
+S2: E2 + PConv
+目的:
+把 decoder 中的 standard conv 换为 PConv。
+验证 PConv 是否提升小病斑边缘、局部纹理和不规则病斑区域。
+
+为什么先跑它:
+PConv 是真实结构改动。
+它比 loss 更适合作为“模型模块创新”的第一步。
+```
+
+```text
+S3: E2 + CAA
+目的:
+在 E2 结构基础上加入 CAA 注意力。
+验证注意力是否能增强病斑区域、边界区域和小组件响应。
+
+注意:
+CAA 不单独作为主创新，因为普通注意力太常见。
+它应当写成 component-aware framework 的增强模块。
+```
+
+```text
+S4: E2 + PConv + CAA
+目的:
+验证 PConv 的局部卷积增强和 CAA 的注意力增强是否互补。
+
+如果 S2 和 S3 都有效:
+S4 是主模型候选。
+
+如果只有 S2 有效:
+主模型偏向 Component Auxiliary Heads + PConv。
+
+如果只有 S3 有效:
+主模型偏向 Component Auxiliary Heads + CAA。
+```
+
+第三阶段：loss 只做辅助，不抢主线
+
+```text
+A1: E2 + Severity Consistency Loss
+当前正在跑，即 M2。
+目的: 验证严重度 MAE / grade accuracy 是否改善。
+定位: 辅助消融。
+
+A2: S4 + Severity Consistency Loss
+只有当 S4 成为主模型候选后再跑。
+目的: 验证结构模块 + 严重度约束是否进一步改善 severity 指标。
+```
+
+第四阶段：旧链路对照
+
+```text
+L0: B0-V3 + PConv
+目的: 单独验证 PConv 对普通 baseline 的贡献。
+
+L1: B0-V3 + CAA
+目的: 单独验证 CAA 对普通 baseline 的贡献。
+
+L2: B0-V3 + PConv + CAA
+目的: 证明 E2 的 component heads 是否仍然必要。
+
+L3: B0-V3 + LBFTLoss
+目的: loss 对照，不作为模块主线。
+
+L4: EfficientNet-B4 + CAA + PConv + LBFTLoss
+目的: 旧完整链路强对照。
+定位: strong engineering comparator，不是主线。
+```
+
+### 下一步应该跑什么
+
+下一步首选：
+
+```text
+S2: E2 + PConv
+```
+
+原因：
+
+```text
+1. 它是真正动结构模块。
+2. 它直接来自旧链路中有价值的部分。
+3. 它和当前 E2 的 component heads 关系清楚，只多一个 decoder 模块变量。
+4. 如果 S2 有提升，论文可以写成:
+   component auxiliary supervision + partial convolution decoder improves lesion boundary localization。
+```
+
+M2 当前处理：
+
+```text
+M2 已经启动，不擅自中断。
+但从论文计划上，M2 不再是主线下一步，而是 loss 辅助消融。
+如果后续 GPU 资源冲突，应优先保留 S2 / S3 / S4 结构模块实验。
+```
+
+### 新判断标准
+
+```text
+S2 相对 E2:
+如果 mIoU > 72.11，且 FG mIoU 或 brown_spot / gray_spot IoU 提升:
+  PConv 保留。
+
+如果 mIoU 接近 72.11，但边界类、小病斑类提升:
+  PConv 可作为边界增强模块保留。
+
+如果 mIoU 和小病斑类都下降:
+  PConv 不进入主模型，只保留为失败消融。
+
+S3 相对 E2:
+如果 CAA 提升小病斑类 IoU 或 FG mIoU:
+  CAA 保留为注意力增强模块。
+
+如果 CAA 只增加复杂度、不提升指标:
+  不把 CAA 写进主模型。
+
+S4 相对 S2 / S3:
+只有同时优于单模块结果，才作为最终主模型候选。
+```
