@@ -197,7 +197,7 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
         pbar.close()
         print('Finish Validation')
         loss_history.append_loss(epoch + 1, total_loss / epoch_step, val_loss / epoch_step_val)
-        eval_callback.on_epoch_end(epoch + 1, model_train)
+        current_miou = eval_callback.on_epoch_end(epoch + 1, model_train)
         print('Epoch:'+ str(epoch + 1) + '/' + str(Epoch))
         print('Total Loss: %.3f || Val Loss: %.3f ' % (total_loss / epoch_step, val_loss / epoch_step_val))
         
@@ -208,7 +208,22 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
             torch.save(model.state_dict(), os.path.join(save_dir, 'ep%03d-loss%.3f-val_loss%.3f.pth' % (epoch + 1, total_loss / epoch_step, val_loss / epoch_step_val)))
 
         if len(loss_history.val_loss) <= 1 or (val_loss / epoch_step_val) <= min(loss_history.val_loss):
-            print('Save best model to best_epoch_weights.pth')
+            print('Save best val-loss model to best_val_loss_weights.pth and best_epoch_weights.pth')
+            torch.save(model.state_dict(), os.path.join(save_dir, "best_val_loss_weights.pth"))
             torch.save(model.state_dict(), os.path.join(save_dir, "best_epoch_weights.pth"))
+
+        best_miou_path = os.path.join(save_dir, "best_miou.txt")
+        previous_best_miou = -1.0
+        if os.path.exists(best_miou_path):
+            try:
+                with open(best_miou_path, "r", encoding="utf-8") as f:
+                    previous_best_miou = float(f.read().strip())
+            except ValueError:
+                previous_best_miou = -1.0
+        if current_miou is not None and current_miou >= previous_best_miou:
+            print('Save best mIoU model to best_miou_weights.pth')
+            torch.save(model.state_dict(), os.path.join(save_dir, "best_miou_weights.pth"))
+            with open(best_miou_path, "w", encoding="utf-8") as f:
+                f.write(str(current_miou))
             
         torch.save(model.state_dict(), os.path.join(save_dir, "last_epoch_weights.pth"))

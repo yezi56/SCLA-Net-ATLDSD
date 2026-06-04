@@ -116,6 +116,22 @@ Run the lower-intensity SCLP ablation:
 ./scripts/run_ubuntu.sh sclp03
 ```
 
+Training now saves both validation-loss and validation-mIoU checkpoints:
+
+```text
+best_val_loss_weights.pth
+best_miou_weights.pth
+last_epoch_weights.pth
+```
+
+Automatic reports default to `best_miou_weights.pth` and include severity-estimation files:
+
+```text
+severity_metrics.json
+severity_per_image.csv
+severity_confusion_matrix.csv
+```
+
 Useful overrides:
 
 ```bash

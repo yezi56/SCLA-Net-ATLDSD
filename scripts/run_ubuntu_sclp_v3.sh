@@ -34,7 +34,7 @@ export ATLDSD_VOCDEVKIT_PATH="${VOCDEVKIT_PATH}"
 export PYTHONPATH="${PROJECT_ROOT}/src:${PROJECT_ROOT}/src/models/deeplabv3plus:${PROJECT_ROOT}/src/modules${PYTHONPATH:+:${PYTHONPATH}}"
 
 RUN_ROOT="${PROJECT_ROOT}/outputs/atldsd/deeplabv3plus_mobilenetv3_large_sclp_150"
-mkdir -p "${RUN_ROOT}/weights" "${RUN_ROOT}/logs" "${RUN_ROOT}/reports/best_val"
+mkdir -p "${RUN_ROOT}/weights" "${RUN_ROOT}/logs" "${RUN_ROOT}/reports/best_miou"
 
 "${PYTHON_BIN}" "${PROJECT_ROOT}/src/models/deeplabv3plus/train.py" \
   --cuda true \
@@ -67,7 +67,8 @@ mkdir -p "${RUN_ROOT}/weights" "${RUN_ROOT}/logs" "${RUN_ROOT}/reports/best_val"
   --sclp-class-weights 1.0 2.0 2.0 3.0 \
   --num-workers "${NUM_WORKERS:-4}" \
   --auto-export-report true \
-  --report-dir "${RUN_ROOT}/reports/best_val" \
+  --report-dir "${RUN_ROOT}/reports/best_miou" \
+  --report-checkpoint best_miou \
   --report-split val \
   --report-fps-interval 100 \
   --save-dir "${RUN_ROOT}/weights" \

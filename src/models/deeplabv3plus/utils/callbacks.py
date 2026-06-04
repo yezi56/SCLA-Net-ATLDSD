@@ -116,6 +116,7 @@ class EvalCallback():
         self.image_ids          = [image_id.split()[0] for image_id in image_ids]
         self.mious      = [0]
         self.epoches    = [0]
+        self.best_miou  = 0.0
         if self.eval_flag:
             with open(os.path.join(self.log_dir, "epoch_miou.txt"), 'a') as f:
                 f.write(str(0))
@@ -194,6 +195,7 @@ class EvalCallback():
             print("Calculate miou.")
             _, IoUs, _, _ = compute_mIoU(gt_dir, pred_dir, self.image_ids, self.num_classes, None)  # 执行计算mIoU的函数
             temp_miou = np.nanmean(IoUs) * 100
+            self.best_miou = max(self.best_miou, temp_miou)
 
             self.mious.append(temp_miou)
             self.epoches.append(epoch)
@@ -225,3 +227,5 @@ class EvalCallback():
                         shutil.rmtree(self.miou_out_path, ignore_errors=True)
                     else:
                         time.sleep(0.5)
+            return temp_miou
+        return None

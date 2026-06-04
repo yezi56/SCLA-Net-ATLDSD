@@ -45,7 +45,7 @@ class ExperimentConfig:
 
     @property
     def report_dir(self) -> Path:
-        return self.run_root / "reports" / "best_val"
+        return self.run_root / "reports" / "best_miou"
 
 
 EXPERIMENTS = {

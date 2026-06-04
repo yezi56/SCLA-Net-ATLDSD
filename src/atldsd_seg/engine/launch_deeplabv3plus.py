@@ -82,6 +82,8 @@ def build_command(experiment_name: str, python_executable: str = sys.executable)
         "true",
         "--report-dir",
         str(cfg.report_dir),
+        "--report-checkpoint",
+        "best_miou",
         "--report-split",
         "val",
         "--report-fps-interval",

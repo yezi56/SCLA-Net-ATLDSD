@@ -1,6 +1,7 @@
 import argparse
 import csv
 import json
+import math
 import os
 import sys
 import time
@@ -79,6 +80,21 @@ def parse_args():
     parser.add_argument("--skip-predict", action="store_true")
     parser.add_argument("--fps-interval", type=int, default=100)
     parser.add_argument("--max-images", type=int, default=None, help="Optional quick-check limit.")
+    parser.add_argument("--leaf-class-id", type=int, default=1)
+    parser.add_argument(
+        "--lesion-class-ids",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Class ids counted as disease lesion pixels. Defaults to classes 2..num_classes-1.",
+    )
+    parser.add_argument(
+        "--severity-thresholds",
+        nargs=2,
+        type=float,
+        default=[0.05, 0.20],
+        metavar=("LOW_MEDIUM", "MEDIUM_HIGH"),
+    )
     return parser.parse_args()
 
 
@@ -173,6 +189,136 @@ def write_confusion_matrix(path, hist, class_names):
             row[f"pred_{pred_name}"] = int(hist[idx, j])
         rows.append(row)
     write_csv(path, rows, ["class_name"] + [f"pred_{name}" for name in class_names])
+
+
+def mean(values):
+    return float(np.mean(values)) if len(values) else 0.0
+
+
+def root_mean_square(values):
+    return float(math.sqrt(np.mean(np.square(values)))) if len(values) else 0.0
+
+
+def pearson_corr(x, y):
+    if len(x) < 2:
+        return 0.0
+    x_arr = np.asarray(x, dtype=np.float64)
+    y_arr = np.asarray(y, dtype=np.float64)
+    if np.std(x_arr) == 0 or np.std(y_arr) == 0:
+        return 0.0
+    return float(np.corrcoef(x_arr, y_arr)[0, 1])
+
+
+def rankdata(values):
+    values = np.asarray(values, dtype=np.float64)
+    order = np.argsort(values)
+    ranks = np.empty(len(values), dtype=np.float64)
+    sorted_values = values[order]
+    start = 0
+    while start < len(values):
+        end = start + 1
+        while end < len(values) and sorted_values[end] == sorted_values[start]:
+            end += 1
+        average_rank = (start + end - 1) / 2.0 + 1.0
+        ranks[order[start:end]] = average_rank
+        start = end
+    return ranks
+
+
+def spearman_corr(x, y):
+    if len(x) < 2:
+        return 0.0
+    return pearson_corr(rankdata(x), rankdata(y))
+
+
+def severity_grade(value, thresholds):
+    low_medium, medium_high = thresholds
+    if value < low_medium:
+        return "low"
+    if value < medium_high:
+        return "medium"
+    return "high"
+
+
+def compute_severity_metrics(gt_dir, pred_dir, image_ids, leaf_class_id, lesion_class_ids, thresholds):
+    grade_names = ["low", "medium", "high"]
+    confusion = {gt_name: {pred_name: 0 for pred_name in grade_names} for gt_name in grade_names}
+    rows = []
+    gt_values = []
+    pred_values = []
+    abs_errors = []
+    sq_errors = []
+    correct_grades = 0
+    valid_count = 0
+
+    for image_id in tqdm(image_ids, desc="Compute severity metrics"):
+        gt = np.array(Image.open(gt_dir / f"{image_id}.png"))
+        pred = np.array(Image.open(pred_dir / f"{image_id}.png"))
+        gt_leaf = (gt == leaf_class_id) | np.isin(gt, lesion_class_ids)
+        pred_leaf = (pred == leaf_class_id) | np.isin(pred, lesion_class_ids)
+        gt_lesion = np.isin(gt, lesion_class_ids)
+        pred_lesion = np.isin(pred, lesion_class_ids)
+
+        gt_leaf_pixels = int(gt_leaf.sum())
+        pred_leaf_pixels = int(pred_leaf.sum())
+        gt_lesion_pixels = int(gt_lesion.sum())
+        pred_lesion_pixels = int(pred_lesion.sum())
+        if gt_leaf_pixels == 0:
+            continue
+
+        gt_severity = safe_div(gt_lesion_pixels, gt_leaf_pixels)
+        pred_severity = safe_div(pred_lesion_pixels, pred_leaf_pixels)
+        abs_error = abs(pred_severity - gt_severity)
+        sq_error = (pred_severity - gt_severity) ** 2
+        gt_grade = severity_grade(gt_severity, thresholds)
+        pred_grade = severity_grade(pred_severity, thresholds)
+        correct = int(gt_grade == pred_grade)
+
+        gt_values.append(gt_severity)
+        pred_values.append(pred_severity)
+        abs_errors.append(abs_error)
+        sq_errors.append(sq_error)
+        correct_grades += correct
+        valid_count += 1
+        confusion[gt_grade][pred_grade] += 1
+        rows.append(
+            {
+                "image_id": image_id,
+                "gt_leaf_pixels": gt_leaf_pixels,
+                "pred_leaf_pixels": pred_leaf_pixels,
+                "gt_lesion_pixels": gt_lesion_pixels,
+                "pred_lesion_pixels": pred_lesion_pixels,
+                "gt_severity": gt_severity,
+                "pred_severity": pred_severity,
+                "abs_error": abs_error,
+                "squared_error": sq_error,
+                "gt_grade": gt_grade,
+                "pred_grade": pred_grade,
+                "grade_correct": correct,
+            }
+        )
+
+    summary = {
+        "severity_mae": mean(abs_errors),
+        "severity_rmse": float(math.sqrt(np.mean(sq_errors))) if len(sq_errors) else 0.0,
+        "severity_pearson": pearson_corr(gt_values, pred_values),
+        "severity_spearman": spearman_corr(gt_values, pred_values),
+        "severity_grade_accuracy": safe_div(correct_grades, valid_count),
+        "severity_thresholds": {
+            "low_medium": thresholds[0],
+            "medium_high": thresholds[1],
+        },
+        "valid_images": valid_count,
+        "lesion_class_ids": list(lesion_class_ids),
+        "leaf_class_id": leaf_class_id,
+    }
+    confusion_rows = []
+    for gt_name in grade_names:
+        row = {"gt_grade": gt_name}
+        for pred_name in grade_names:
+            row[f"pred_{pred_name}"] = confusion[gt_name][pred_name]
+        confusion_rows.append(row)
+    return summary, rows, confusion_rows
 
 
 def load_model_api(args):
@@ -304,6 +450,15 @@ def main():
     args = parse_args()
     if len(args.class_names) != args.num_classes:
         raise ValueError("--class-names length must match --num-classes")
+    if args.lesion_class_ids is None:
+        args.lesion_class_ids = list(range(2, args.num_classes))
+    invalid_lesion_ids = [idx for idx in args.lesion_class_ids if idx < 0 or idx >= args.num_classes]
+    if invalid_lesion_ids:
+        raise ValueError(f"--lesion-class-ids contains invalid ids: {invalid_lesion_ids}")
+    if args.leaf_class_id < 0 or args.leaf_class_id >= args.num_classes:
+        raise ValueError("--leaf-class-id must be in [0, num_classes)")
+    if args.severity_thresholds[0] >= args.severity_thresholds[1]:
+        raise ValueError("--severity-thresholds must be increasing")
 
     output_dir = args.output_dir
     pred_dir = output_dir / "pred_masks"
@@ -333,6 +488,9 @@ def main():
         "input_shape": args.input_shape,
         "cuda": args.cuda,
         "image_count": len(image_ids),
+        "leaf_class_id": args.leaf_class_id,
+        "lesion_class_ids": args.lesion_class_ids,
+        "severity_thresholds": args.severity_thresholds,
     }
     write_json(output_dir / "run_config.json", run_config)
 
@@ -361,12 +519,29 @@ def main():
     write_csv(output_dir / "per_class_metrics.csv", per_class_rows, list(per_class_rows[0].keys()))
     write_confusion_matrix(output_dir / "confusion_matrix.csv", hist, args.class_names)
 
+    severity_summary, severity_rows, severity_confusion_rows = compute_severity_metrics(
+        gt_dir,
+        pred_dir,
+        image_ids,
+        args.leaf_class_id,
+        args.lesion_class_ids,
+        args.severity_thresholds,
+    )
+    write_json(output_dir / "severity_metrics.json", severity_summary)
+    write_csv(output_dir / "severity_per_image.csv", severity_rows, list(severity_rows[0].keys()) if severity_rows else ["image_id"])
+    write_csv(
+        output_dir / "severity_confusion_matrix.csv",
+        severity_confusion_rows,
+        list(severity_confusion_rows[0].keys()),
+    )
+
     sample_image = args.vocdevkit_path / "VOC2007" / "JPEGImages" / f"{image_ids[0]}.jpg"
     complexity = compute_complexity(args, sample_image)
     write_json(output_dir / "complexity.json", complexity)
 
     print(f"Saved report to: {output_dir}")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    print(json.dumps(severity_summary, ensure_ascii=False, indent=2))
     print(json.dumps(complexity, ensure_ascii=False, indent=2))
 
 

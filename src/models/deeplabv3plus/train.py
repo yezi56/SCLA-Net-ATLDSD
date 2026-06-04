@@ -111,6 +111,12 @@ def parse_args():
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--auto-export-report", type=str2bool, default=True)
     parser.add_argument("--report-dir", type=str, default=None)
+    parser.add_argument(
+        "--report-checkpoint",
+        type=str,
+        default="best_miou",
+        choices=["best_miou", "best_val_loss", "last", "best_epoch"],
+    )
     parser.add_argument("--report-split", type=str, default="val", choices=["train", "val", "test"])
     parser.add_argument("--report-fps-interval", type=int, default=100)
     parser.add_argument(
@@ -161,15 +167,19 @@ def auto_export_report(args, dataset_path):
     if not save_dir.is_absolute():
         save_dir = lab_root / save_dir
     save_dir = save_dir.resolve()
-    best_model = save_dir / "best_epoch_weights.pth"
-    last_model = save_dir / "last_epoch_weights.pth"
-    model_path = best_model if best_model.exists() else last_model
-    if not model_path.exists():
+    checkpoint_candidates = {
+        "best_miou": [save_dir / "best_miou_weights.pth", save_dir / "best_epoch_weights.pth", save_dir / "last_epoch_weights.pth"],
+        "best_val_loss": [save_dir / "best_val_loss_weights.pth", save_dir / "best_epoch_weights.pth", save_dir / "last_epoch_weights.pth"],
+        "best_epoch": [save_dir / "best_epoch_weights.pth", save_dir / "last_epoch_weights.pth"],
+        "last": [save_dir / "last_epoch_weights.pth"],
+    }
+    model_path = next((path for path in checkpoint_candidates[args.report_checkpoint] if path.exists()), None)
+    if model_path is None or not model_path.exists():
         print(f"[AutoReport] Skip: no checkpoint found in {save_dir}")
         return
 
     if args.report_dir is None:
-        output_dir = save_dir.parent / "reports" / f"best_{args.report_split}"
+        output_dir = save_dir.parent / "reports" / f"{args.report_checkpoint}_{args.report_split}"
     else:
         output_dir = Path(args.report_dir)
         if not output_dir.is_absolute():
@@ -217,6 +227,8 @@ def auto_export_report(args, dataset_path):
         str(args.cuda).lower(),
         "--fps-interval",
         str(args.report_fps_interval),
+        "--leaf-class-id",
+        "1",
     ]
     for arg_name, value in [
         ("--attention-low-type", args.attention_low_type),
