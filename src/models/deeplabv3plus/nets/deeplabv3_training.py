@@ -7,6 +7,8 @@ import torch.nn.functional as F
 
 
 def CE_Loss(inputs, target, cls_weights, num_classes=21):
+    if isinstance(inputs, dict):
+        inputs = inputs["logits"]
     n, c, h, w = inputs.size()
     nt, ht, wt = target.size()
     if h != ht and w != wt:
@@ -20,6 +22,8 @@ def CE_Loss(inputs, target, cls_weights, num_classes=21):
 
 
 def Softmax_CE_Loss(inputs, soft_target, cls_weights, num_classes=21):
+    if isinstance(inputs, dict):
+        inputs = inputs["logits"]
     n, c, h, w = inputs.size()
     nt, ht, wt, ct = soft_target.size()
     if h != ht and w != wt:
@@ -39,6 +43,8 @@ def Softmax_CE_Loss(inputs, soft_target, cls_weights, num_classes=21):
     return loss.sum() / normalizer
 
 def Focal_Loss(inputs, target, cls_weights, num_classes=21, alpha=0.5, gamma=2):
+    if isinstance(inputs, dict):
+        inputs = inputs["logits"]
     # Extended from the focal-loss reference under:
     # Integrated as plugins.FocalLoss / build_loss("focal").
     # This version keeps ignore-label behavior and also supports soft labels
@@ -85,6 +91,8 @@ def Focal_Loss(inputs, target, cls_weights, num_classes=21, alpha=0.5, gamma=2):
     return loss
 
 def Dice_loss(inputs, target, beta=1, smooth = 1e-5):
+    if isinstance(inputs, dict):
+        inputs = inputs["logits"]
     n, c, h, w = inputs.size()
     nt, ht, wt, ct = target.size()
     if h != ht and w != wt:
@@ -106,6 +114,8 @@ def Dice_loss(inputs, target, beta=1, smooth = 1e-5):
 
 
 def Focal_Tversky_Loss(inputs, target, alpha=0.3, beta=0.7, gamma=1.33, smooth=1e-5):
+    if isinstance(inputs, dict):
+        inputs = inputs["logits"]
     n, c, h, w = inputs.size()
     nt, ht, wt, ct = target.size()
     if h != ht and w != wt:
@@ -128,6 +138,63 @@ def Focal_Tversky_Loss(inputs, target, alpha=0.3, beta=0.7, gamma=1.33, smooth=1
 
     score = (tp + smooth) / (tp + alpha * fp + beta * fn + smooth)
     return torch.mean(torch.pow(1.0 - score, gamma))
+
+
+def _binary_pos_weight(target, valid_mask):
+    positives = (target[valid_mask] > 0.5).sum().float()
+    negatives = (target[valid_mask] <= 0.5).sum().float()
+    return (negatives / positives.clamp(min=1.0)).clamp(min=1.0, max=20.0)
+
+
+def _build_component_targets(mask, num_classes):
+    valid = mask != num_classes
+    lesion_ids = torch.arange(2, num_classes, device=mask.device, dtype=mask.dtype)
+    lesion = torch.isin(mask, lesion_ids) & valid
+    lesion_float = lesion.float().unsqueeze(1)
+
+    eroded = 1.0 - F.max_pool2d(1.0 - lesion_float, kernel_size=3, stride=1, padding=1)
+    boundary = (lesion_float - eroded).clamp_min(0.0)
+    center = F.avg_pool2d(lesion_float, kernel_size=9, stride=1, padding=4) * lesion_float
+    return lesion_float, boundary, center, valid.unsqueeze(1)
+
+
+def Component_Aux_Loss(outputs, target, num_classes, lesion_weight=0.4, boundary_weight=0.2, center_weight=0.2):
+    if not isinstance(outputs, dict):
+        return outputs.sum() * 0.0
+
+    required = {"lesion_logits", "boundary_logits", "center_logits"}
+    if not required.issubset(outputs):
+        missing = ", ".join(sorted(required - set(outputs)))
+        raise KeyError(f"Missing component auxiliary outputs: {missing}")
+
+    lesion_target, boundary_target, center_target, valid = _build_component_targets(target, num_classes)
+    losses = []
+    for key, aux_target, weight in [
+        ("lesion_logits", lesion_target, lesion_weight),
+        ("boundary_logits", boundary_target, boundary_weight),
+        ("center_logits", center_target, center_weight),
+    ]:
+        if weight <= 0:
+            continue
+        logits = outputs[key]
+        if logits.shape[-2:] != aux_target.shape[-2:]:
+            logits = F.interpolate(logits, size=aux_target.shape[-2:], mode="bilinear", align_corners=True)
+        valid_logits = logits[valid]
+        valid_target = aux_target[valid]
+        if valid_target.numel() == 0:
+            continue
+        pos_weight = _binary_pos_weight(aux_target, valid)
+        losses.append(
+            weight
+            * F.binary_cross_entropy_with_logits(
+                valid_logits,
+                valid_target,
+                pos_weight=pos_weight,
+            )
+        )
+    if not losses:
+        return outputs["logits"].sum() * 0.0
+    return sum(losses)
 
 def weights_init(net, init_type='normal', init_gain=0.02):
     def init_func(m):

@@ -10,6 +10,8 @@ from PIL import Image
 
 
 def f_score(inputs, target, beta=1, smooth = 1e-5, threhold = 0.5):
+    if isinstance(inputs, dict):
+        inputs = inputs["logits"]
     n, c, h, w = inputs.size()
     nt, ht, wt, ct = target.size()
     if h != ht and w != wt:

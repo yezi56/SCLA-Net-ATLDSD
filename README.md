@@ -116,6 +116,12 @@ Run the lower-intensity SCLP ablation:
 ./scripts/run_ubuntu.sh sclp03
 ```
 
+Run the component-auxiliary E2 experiment:
+
+```bash
+./scripts/run_ubuntu.sh component_aux
+```
+
 Training now saves both validation-loss and validation-mIoU checkpoints:
 
 ```text

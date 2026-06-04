@@ -141,6 +141,15 @@ class DeeplabV3(object):
             return "repconv"
         return "standard"
 
+    def _resolve_use_component_aux(self, checkpoint):
+        return any(key.startswith(("lesion_aux_head.", "boundary_aux_head.", "center_aux_head.")) for key in checkpoint.keys())
+
+    @staticmethod
+    def _main_output(output):
+        if isinstance(output, dict):
+            return output["logits"]
+        return output
+
     def _resolve_backbone(self, checkpoint):
         if self.backbone and self.backbone != "auto":
             return self.backbone
@@ -189,6 +198,7 @@ class DeeplabV3(object):
         attention_decoder_type = self._resolve_stage_attention_type(checkpoint, "attention_decoder_type", "attention_decoder.", attention_type)
         use_ppm = self._resolve_use_ppm(checkpoint)
         decoder_conv_type = self._resolve_decoder_conv_type(checkpoint)
+        use_component_aux = self._resolve_use_component_aux(checkpoint)
         self.net = DeepLab(
             num_classes=self.num_classes,
             backbone=backbone,
@@ -201,6 +211,7 @@ class DeeplabV3(object):
             attention_decoder_type=attention_decoder_type,
             decoder_conv_type=decoder_conv_type,
             use_ppm=use_ppm,
+            use_component_aux=use_component_aux,
         )
 
         device      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -257,7 +268,7 @@ class DeeplabV3(object):
             #---------------------------------------------------#
             #   图片传入网络进行预测
             #---------------------------------------------------#
-            pr = self.net(images)[0]
+            pr = self._main_output(self.net(images))[0]
             #---------------------------------------------------#
             #   取出每一个像素点的种类
             #---------------------------------------------------#
@@ -355,7 +366,7 @@ class DeeplabV3(object):
             #---------------------------------------------------#
             #   图片传入网络进行预测
             #---------------------------------------------------#
-            pr = self.net(images)[0]
+            pr = self._main_output(self.net(images))[0]
             #---------------------------------------------------#
             #   取出每一个像素点的种类
             #---------------------------------------------------#
@@ -372,7 +383,7 @@ class DeeplabV3(object):
                 #---------------------------------------------------#
                 #   图片传入网络进行预测
                 #---------------------------------------------------#
-                pr = self.net(images)[0]
+                pr = self._main_output(self.net(images))[0]
                 #---------------------------------------------------#
                 #   取出每一个像素点的种类
                 #---------------------------------------------------#
@@ -450,7 +461,7 @@ class DeeplabV3(object):
             #---------------------------------------------------#
             #   图片传入网络进行预测
             #---------------------------------------------------#
-            pr = self.net(images)[0]
+            pr = self._main_output(self.net(images))[0]
             #---------------------------------------------------#
             #   取出每一个像素点的种类
             #---------------------------------------------------#

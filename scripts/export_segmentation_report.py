@@ -74,6 +74,7 @@ def parse_args():
     parser.add_argument("--attention-decoder-type", type=str, default=None)
     parser.add_argument("--decoder-conv-type", type=str, default="standard", choices=["standard", "pconv", "repconv"])
     parser.add_argument("--use-ppm", type=str2bool, default=False)
+    parser.add_argument("--component-aux", type=str2bool, default=False)
     parser.add_argument("--downsample-factor", type=int, default=16)
     parser.add_argument("--input-shape", nargs=2, type=int, default=[512, 512], metavar=("H", "W"))
     parser.add_argument("--cuda", type=str2bool, default=True)
@@ -363,6 +364,7 @@ def build_predictor(args):
                 "attention_aspp_type": attention_aspp_type,
                 "attention_decoder_type": attention_decoder_type,
                 "decoder_conv_type": args.decoder_conv_type,
+                "component_aux": args.component_aux,
             }
         )
     return Predictor(**kwargs)
@@ -402,6 +404,7 @@ def compute_complexity(args, sample_image_path):
             attention_decoder_type=attention_decoder_type,
             decoder_conv_type=args.decoder_conv_type,
             use_ppm=args.use_ppm,
+            use_component_aux=args.component_aux,
         ).to(device)
     else:
         model = Model(
@@ -484,6 +487,7 @@ def main():
         "attention_decoder_type": args.attention_decoder_type,
         "decoder_conv_type": args.decoder_conv_type,
         "use_ppm": args.use_ppm,
+        "component_aux": args.component_aux,
         "downsample_factor": args.downsample_factor,
         "input_shape": args.input_shape,
         "cuda": args.cuda,

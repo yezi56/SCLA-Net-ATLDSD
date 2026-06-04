@@ -107,6 +107,10 @@ def parse_args():
         default=[1.0, 2.0, 2.0, 3.0],
         metavar=("RUST", "ALTERNARIA", "GRAY", "BROWN"),
     )
+    parser.add_argument("--component-aux", type=str2bool, default=False, help="Use lesion/boundary/center auxiliary heads.")
+    parser.add_argument("--component-lesion-weight", type=float, default=0.4)
+    parser.add_argument("--component-boundary-weight", type=float, default=0.2)
+    parser.add_argument("--component-center-weight", type=float, default=0.2)
     parser.add_argument("--cls-weights", nargs="+", type=float, default=None)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--auto-export-report", type=str2bool, default=True)
@@ -216,6 +220,8 @@ def auto_export_report(args, dataset_path):
         attention_type,
         "--use-ppm",
         str(args.use_ppm).lower(),
+        "--component-aux",
+        str(args.component_aux).lower(),
         "--downsample-factor",
         str(args.downsample_factor),
         "--decoder-conv-type",
@@ -296,6 +302,7 @@ if __name__ == "__main__":
         decoder_conv_type=args.decoder_conv_type,
         use_ppm=args.use_ppm,
         ppm_bins=args.ppm_bins,
+        use_component_aux=args.component_aux,
     )
     if not args.pretrained:
         weights_init(model)
@@ -404,6 +411,10 @@ if __name__ == "__main__":
             sclp=args.sclp,
             sclp_prob=args.sclp_prob,
             sclp_max_components=args.sclp_max_components,
+            component_aux=args.component_aux,
+            component_lesion_weight=args.component_lesion_weight,
+            component_boundary_weight=args.component_boundary_weight,
+            component_center_weight=args.component_center_weight,
             num_workers=args.num_workers,
             num_train=num_train,
             num_val=num_val,
@@ -592,6 +603,10 @@ if __name__ == "__main__":
             mix_prob=args.mix_prob,
             mixup_alpha=args.mixup_alpha,
             cutmix_alpha=args.cutmix_alpha,
+            component_aux=args.component_aux,
+            component_lesion_weight=args.component_lesion_weight,
+            component_boundary_weight=args.component_boundary_weight,
+            component_center_weight=args.component_center_weight,
         )
 
         if args.distributed:

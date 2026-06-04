@@ -260,8 +260,10 @@ class DeepLab(nn.Module):
         decoder_conv_type="standard",
         use_ppm=False,
         ppm_bins=(1, 2, 3, 6),
+        use_component_aux=False,
     ):
         super().__init__()
+        self.use_component_aux = use_component_aux
 
         self.backbone, in_channels, low_level_channels = build_backbone(
             backbone,
@@ -295,6 +297,10 @@ class DeepLab(nn.Module):
         )
         self.attention_decoder = build_attention(attention_decoder_type, 256)
         self.cls_conv = nn.Conv2d(256, num_classes, 1, stride=1)
+        if self.use_component_aux:
+            self.lesion_aux_head = nn.Conv2d(256, 1, 1, stride=1)
+            self.boundary_aux_head = nn.Conv2d(256, 1, 1, stride=1)
+            self.center_aux_head = nn.Conv2d(256, 1, 1, stride=1)
 
     def forward(self, x):
         height, width = x.size(2), x.size(3)
@@ -309,6 +315,13 @@ class DeepLab(nn.Module):
         x = F.interpolate(x, size=(low_level_features.size(2), low_level_features.size(3)), mode="bilinear", align_corners=True)
         x = self.cat_conv(torch.cat((x, low_level_features), dim=1))
         x = self.attention_decoder(x)
-        x = self.cls_conv(x)
-        x = F.interpolate(x, size=(height, width), mode="bilinear", align_corners=True)
-        return x
+        logits = self.cls_conv(x)
+        logits = F.interpolate(logits, size=(height, width), mode="bilinear", align_corners=True)
+        if not self.use_component_aux:
+            return logits
+        return {
+            "logits": logits,
+            "lesion_logits": F.interpolate(self.lesion_aux_head(x), size=(height, width), mode="bilinear", align_corners=True),
+            "boundary_logits": F.interpolate(self.boundary_aux_head(x), size=(height, width), mode="bilinear", align_corners=True),
+            "center_logits": F.interpolate(self.center_aux_head(x), size=(height, width), mode="bilinear", align_corners=True),
+        }

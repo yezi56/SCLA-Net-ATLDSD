@@ -1,7 +1,7 @@
 import os
 
 import torch
-from nets.deeplabv3_training import (CE_Loss, Dice_loss, Focal_Loss,
+from nets.deeplabv3_training import (CE_Loss, Component_Aux_Loss, Dice_loss, Focal_Loss,
                                      Focal_Tversky_Loss, Softmax_CE_Loss,
                                      weights_init)
 from tqdm import tqdm
@@ -13,7 +13,7 @@ from utils.utils_metrics import f_score
 
 def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Epoch, cuda, dice_loss, focal_loss, cls_weights, num_classes, \
     fp16, scaler, save_period, save_dir, local_rank=0, focal_alpha=0.5, focal_gamma=2.0, mix_mode="none", mix_prob=0.0, mixup_alpha=0.4, cutmix_alpha=1.0, \
-    lbft_loss=False, lbft_lambda=1.0, lbft_alpha=0.3, lbft_beta=0.7, lbft_gamma=1.33):
+    lbft_loss=False, lbft_lambda=1.0, lbft_alpha=0.3, lbft_beta=0.7, lbft_gamma=1.33, component_aux=False, component_lesion_weight=0.4, component_boundary_weight=0.2, component_center_weight=0.2):
     total_loss      = 0
     total_f_score   = 0
 
@@ -99,6 +99,16 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
                 main_dice = Dice_loss(outputs, labels)
                 loss      = loss + main_dice
 
+            if component_aux:
+                loss = loss + Component_Aux_Loss(
+                    outputs,
+                    pngs,
+                    num_classes,
+                    lesion_weight=component_lesion_weight,
+                    boundary_weight=component_boundary_weight,
+                    center_weight=component_center_weight,
+                )
+
             with torch.no_grad():
                 #-------------------------------#
                 #   计算f_score
@@ -125,6 +135,16 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
                 if dice_loss:
                     main_dice = Dice_loss(outputs, labels)
                     loss      = loss + main_dice
+
+                if component_aux:
+                    loss = loss + Component_Aux_Loss(
+                        outputs,
+                        pngs,
+                        num_classes,
+                        lesion_weight=component_lesion_weight,
+                        boundary_weight=component_boundary_weight,
+                        center_weight=component_center_weight,
+                    )
 
                 with torch.no_grad():
                     #-------------------------------#
