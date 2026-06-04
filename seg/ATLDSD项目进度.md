@@ -2951,3 +2951,29 @@ Linux:
 同步状态:
 Windows / Linux 已同步。
 ```
+
+E1.1 启动状态：
+
+```text
+启动时间: 2026-06-04 14:54
+本机 PID: 8884
+状态: 正在训练
+当前输出目录:
+  D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_sclp03_150
+```
+
+本次 GitHub 上传记录：
+
+```text
+提交: 364733e
+标题: Add low-intensity SCLP experiment
+目的: 新增 E1.1 低强度 SCLP 消融实验，验证 sclp_prob=0.3 是否比 E1 的 0.7 更稳。
+主要修改:
+- scripts/run_atldsd_deeplabv3plus_mobilenetv3_large_sclp03_150.ps1
+- scripts/run_ubuntu_sclp03_v3.sh
+- scripts/run_ubuntu.sh
+- README.md
+- seg/ATLDSD项目进度.md
+对应实验: E1.1
+Windows / Linux 同步状态: 已同步。
+```
