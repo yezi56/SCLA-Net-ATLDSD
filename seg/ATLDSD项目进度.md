@@ -3505,6 +3505,116 @@ Component-guided Lesion Segmentation and Severity Grading Network
 这样才更接近 2025/2026 相关论文的发表逻辑。
 ```
 
+## 2026-06-04 Step 0/1 完成：best-mIoU checkpoint 与严重度评估
+
+### 本次代码提交
+
+```text
+提交: 2b797ca
+标题: Add best mIoU checkpoint and severity metrics
+目的:
+1. 修正 checkpoint 选择协议，新增 best_miou_weights.pth。
+2. 报告脚本新增 severity metrics。
+3. Windows / Linux 启动脚本同步改为默认导出 best_miou 报告。
+
+主要修改:
+- src/models/deeplabv3plus/utils/callbacks.py
+- src/models/deeplabv3plus/utils/utils_fit.py
+- src/models/deeplabv3plus/train.py
+- scripts/export_segmentation_report.py
+- src/atldsd_seg/configs/experiments.py
+- src/atldsd_seg/engine/launch_deeplabv3plus.py
+- scripts/run_atldsd_deeplabv3plus_mobilenetv3_large_sclp_150.ps1
+- scripts/run_atldsd_deeplabv3plus_mobilenetv3_large_sclp03_150.ps1
+- scripts/run_ubuntu_baseline_v3.sh
+- scripts/run_ubuntu_sclp_v3.sh
+- scripts/run_ubuntu_sclp03_v3.sh
+- README.md
+
+Windows / Linux 同步状态:
+已同步。
+```
+
+### 新增输出文件
+
+训练后新增：
+
+```text
+best_miou_weights.pth
+best_miou.txt
+best_val_loss_weights.pth
+last_epoch_weights.pth
+```
+
+报告后新增：
+
+```text
+severity_metrics.json
+severity_per_image.csv
+severity_confusion_matrix.csv
+```
+
+severity 定义：
+
+```text
+GT severity = GT lesion pixels / GT leaf pixels
+Pred severity = Pred lesion pixels / Pred leaf pixels
+lesion classes = 2, 3, 4, 5
+leaf class = 1
+severity grade thresholds:
+  low < 0.05
+  0.05 <= medium < 0.20
+  high >= 0.20
+```
+
+### 已用新协议重导已有实验
+
+统一使用 val split，并选择旧训练中 mIoU 曲线对应的最佳 checkpoint：
+
+```text
+B0-V3:
+checkpoint: ep150-loss0.491-val_loss0.469.pth
+report_dir: outputs/atldsd/deeplabv3plus_mobilenetv3_large_150/reports/best_miou
+
+E1 SCLP 0.7:
+checkpoint: ep120-loss0.387-val_loss0.499.pth
+report_dir: outputs/atldsd/deeplabv3plus_mobilenetv3_large_sclp_150/reports/best_miou
+
+E1.1 SCLP 0.3:
+checkpoint: ep050-loss0.426-val_loss0.415.pth
+report_dir: outputs/atldsd/deeplabv3plus_mobilenetv3_large_sclp03_150/reports/best_miou
+```
+
+### 统一重导结果
+
+```text
+Method              mIoU    FG mIoU  Acc     Sev MAE   Sev RMSE  Pearson  Spearman  Grade Acc
+B0-V3              71.72   66.58    97.76   0.0124    0.0338    0.8652   0.9134    95.12
+SCLP 0.7           68.97   63.28    97.71   0.0154    0.0397    0.8306   0.8911    90.24
+SCLP 0.3           69.90   64.67    96.76   0.0159    0.0393    0.8586   0.8840    90.65
+```
+
+关键结论：
+
+```text
+1. B0-V3 在 mIoU、FG mIoU、Severity MAE、Severity RMSE、Spearman、Grade Accuracy 上都优于两个 SCLP。
+2. SCLP 0.3 虽然比 SCLP 0.7 的 mIoU 稍高，但严重度 MAE 更差。
+3. SCLP 不能作为主创新，也不适合作为当前优先增强。
+```
+
+当前决策：
+
+```text
+SCLP 主线正式降级。
+下一步进入 E2:
+DeepLabV3+ MobileNetV3-Large + Component Auxiliary Heads
+
+E2 目标:
+1. 保持或超过 B0-V3 mIoU = 71.72。
+2. 降低 severity MAE < 0.0124。
+3. 提升 gray_spot / brown_spot 等小病斑类。
+```
+
 ```text
 提交: 6a1e330
 标题: Add Ubuntu Python bootstrap script
