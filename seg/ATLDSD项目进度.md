@@ -2851,3 +2851,103 @@ Windows / Linux 同步状态: 已同步。
 - README.md
 Windows / Linux 同步状态: Linux 侧新增兜底脚本，Windows 侧不需要对应改动。
 ```
+
+## 2026-06-04 E1 训练完成与 E1.1 低强度 SCLP 计划
+
+### E1 训练完成
+
+```text
+实验编号: E1
+实验名称: deeplabv3plus_mobilenetv3_large_sclp_150
+模型: DeepLabV3+ + MobileNetV3-Large
+与 B0-V3 baseline 的区别: 只增加 SCLP 数据增强
+SCLP 参数:
+  sclp_prob = 0.7
+  sclp_max_components = 3
+训练轮数: 150
+训练状态: 已完成
+```
+
+E1 结果：
+
+```text
+最高训练评估 mIoU: 68.97%，约 epoch 120
+epoch150 mIoU: 68.47%
+epoch150 mPA: 87.65%
+epoch150 Accuracy: 97.76%
+epoch150 Train Loss: 0.384
+epoch150 Val Loss: 0.490
+```
+
+和最强 baseline 对比：
+
+```text
+B0-V3 baseline:
+mIoU = 71.72%
+FG mIoU = 66.58%
+brown_spot IoU = 48.42%
+
+E1 SCLP 0.7:
+最高 mIoU = 68.97%
+
+差距:
+-2.75 mIoU
+```
+
+结论：
+
+```text
+SCLP_PROB=0.7 太强，没有超过 baseline。
+当前 E1 不能作为正向创新结果。
+E1 暂时只能说明: 过强的病斑 copy-paste 会干扰模型学习。
+```
+
+注意：
+
+```text
+best_val 报告中的 mIoU=65.56 是 best_epoch_weights.pth 的结果。
+best_epoch_weights.pth 当前按 val loss 保存，不是按 mIoU 保存。
+论文对比时应统一导出指定 checkpoint 或改成按 best mIoU 保存。
+```
+
+### 下一步 E1.1
+
+E1.1 目的：
+
+```text
+降低 SCLP 强度，验证温和病斑增强是否有效。
+如果 E1.1 能接近或超过 71.72%，说明 SCLP 仍有保留价值。
+如果 E1.1 仍明显低于 baseline，则 SCLP 不适合作为主创新，只能降级为辅助增强或弃用。
+```
+
+E1.1 参数：
+
+```text
+实验编号: E1.1
+实验名称: deeplabv3plus_mobilenetv3_large_sclp03_150
+模型: DeepLabV3+ + MobileNetV3-Large
+训练方式: 6 类 softmax
+SCLP:
+  sclp_prob = 0.3
+  sclp_max_components = 2
+训练轮数: 150
+输出目录:
+  D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_sclp03_150
+```
+
+本次代码同步修改：
+
+```text
+Windows:
+- scripts/run_atldsd_deeplabv3plus_mobilenetv3_large_sclp03_150.ps1
+
+Linux:
+- scripts/run_ubuntu_sclp03_v3.sh
+- scripts/run_ubuntu.sh
+
+说明文档:
+- README.md
+
+同步状态:
+Windows / Linux 已同步。
+```

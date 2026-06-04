@@ -110,6 +110,12 @@ Run the current SCLA-Net E1 experiment:
 ./scripts/run_ubuntu.sh sclp
 ```
 
+Run the lower-intensity SCLP ablation:
+
+```bash
+./scripts/run_ubuntu.sh sclp03
+```
+
 Useful overrides:
 
 ```bash

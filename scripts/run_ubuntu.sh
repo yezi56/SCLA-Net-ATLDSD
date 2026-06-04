@@ -11,8 +11,11 @@ case "${MODE}" in
   sclp|e1|ours)
     exec "${SCRIPT_DIR}/run_ubuntu_sclp_v3.sh"
     ;;
+  sclp03|e1.1)
+    exec "${SCRIPT_DIR}/run_ubuntu_sclp03_v3.sh"
+    ;;
   *)
-    echo "Usage: $0 [baseline|sclp]" >&2
+    echo "Usage: $0 [baseline|sclp|sclp03]" >&2
     exit 2
     ;;
 esac
