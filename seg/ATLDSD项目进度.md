@@ -2842,6 +2842,291 @@ export PATH="$HOME/miniconda3/bin:$PATH"
 Windows / Linux 同步状态: 已同步。
 ```
 
+## 2026-06-04 基于 Reviewer 批评后的纠偏版训练计划
+
+本节用于修正原训练路线。核心原则：
+
+```text
+先修实验协议，再谈创新模块。
+先证明严重度任务闭环，再谈 SCI 论文主线。
+先让 SCLP 通过消融筛选，再决定是否保留为创新点。
+```
+
+### 当前风险判断
+
+Reviewer 会抓住的三个硬伤：
+
+```text
+1. SCLP 0.7 目前是负收益，不能直接作为主创新。
+2. best_epoch_weights.pth 按 val loss 保存，但论文核心指标是 mIoU，checkpoint 选择规则混乱。
+3. 论文目标说“病害严重度判断”，但目前主要只评估语义分割，没有正式严重度 MAE / RMSE / 相关性 / 分级准确率。
+```
+
+因此，后续训练计划必须从“堆模块”改为“先补协议闭环”。
+
+### 当前正在跑的实验
+
+```text
+实验编号: E1.1
+实验名称: deeplabv3plus_mobilenetv3_large_sclp03_150
+状态: 正在训练，不中断
+当前进度: 约 epoch 59 / 150
+已知中期结果:
+  epoch50 mIoU = 69.90
+对比:
+  B0-V3 baseline mIoU = 71.72
+判断:
+  E1.1 比 E1 的 SCLP 0.7 更稳，但当前仍未超过 baseline。
+```
+
+最新滚动状态：
+
+```text
+epoch60 mIoU = 62.02
+说明: epoch50 后骨干解冻，短期震荡明显。
+决策: 不因 epoch60 单点中断，至少观察 epoch80 / epoch100 是否恢复。
+```
+
+E1.1 继续跑完，原因：
+
+```text
+1. 它是纠正 E1 过强增强后的必要消融。
+2. epoch50 已经达到 69.90，比 E1 后期最高 68.97 更好。
+3. 不能只看中期结果，需要等 epoch100 / epoch120 / epoch150。
+```
+
+### 阶段 0：立刻修正评价协议
+
+目的：
+
+```text
+消除 Reviewer 对结果选择规则的质疑。
+```
+
+必须补的代码/流程：
+
+```text
+1. 训练时同时保存:
+   - best_val_loss_weights.pth
+   - best_miou_weights.pth
+   - last_epoch_weights.pth
+
+2. 所有论文表格统一使用:
+   best_miou_weights.pth on validation set
+
+3. 最终模型确定后，只在 test set 上评估一次。
+
+4. 每个实验都导出:
+   - metrics_summary.json
+   - per_class_metrics.csv
+   - confusion_matrix.csv
+   - complexity.json
+   - severity_metrics.json
+```
+
+同步要求：
+
+```text
+如果改训练保存逻辑:
+Windows .ps1 不一定改，但 Linux .sh 和 README 要检查。
+如果新增报告参数:
+Windows .ps1 和 Linux .sh 必须同步。
+修改后必须 push GitHub，并在本笔记记录提交哈希。
+```
+
+### 阶段 1：补严重度评估，不先加新模块
+
+严重度定义：
+
+```text
+GT severity = GT lesion pixels / GT leaf pixels
+Pred severity = Pred lesion pixels / Pred leaf pixels
+lesion classes = rust + alternaria_leaf_spot + gray_spot + brown_spot
+leaf region = leaf + lesion classes
+```
+
+必须新增指标：
+
+```text
+1. Severity MAE
+2. Severity RMSE
+3. Pearson correlation
+4. Spearman correlation
+5. Low / Medium / High severity classification accuracy
+6. Severity confusion matrix
+```
+
+建议严重度分级：
+
+```text
+low:    severity < 5%
+medium: 5% <= severity < 20%
+high:   severity >= 20%
+```
+
+如果数据分布不适合 5% / 20%，则改为按训练集三分位数划分，但必须在论文中说明阈值来自 train set，不能用 test set 调阈值。
+
+### 阶段 2：SCLP 强度消融，而不是盲目继续堆
+
+已有：
+
+```text
+B0-V3: SCLP 0.0, mIoU 71.72
+E1:    SCLP 0.7, best observed mIoU 68.97
+E1.1:  SCLP 0.3, 正在训练
+```
+
+纠偏后的消融顺序：
+
+```text
+1. 等 E1.1 跑完。
+2. 如果 E1.1 best mIoU >= 71.72:
+   保留 SCLP，继续做 SCLP 0.1 / 0.5 补曲线。
+
+3. 如果 E1.1 best mIoU 在 70.50 到 71.72:
+   查看 per-class IoU 和 severity metrics。
+   如果 brown_spot / gray_spot 或 severity MAE 明显改善，可以把 SCLP 写成 severity-oriented trade-off。
+
+4. 如果 E1.1 best mIoU < 70.50:
+   SCLP 不再作为主创新，只作为失败消融记录。
+   后续不再跑 SCLP 0.5，最多补一个 SCLP 0.1 证明趋势。
+```
+
+SCLP 的保留阈值：
+
+```text
+强保留:
+  mIoU >= 71.72
+  且 brown_spot IoU >= 48.42
+
+弱保留:
+  mIoU 下降不超过 1.0
+  但 severity MAE 下降 >= 5%
+  或 brown_spot / gray_spot 明显提升
+
+放弃:
+  mIoU < 70.50
+  且 per-class / severity 无明显收益
+```
+
+### 阶段 3：重新定义主创新路线
+
+如果 SCLP 不能成为主创新，则论文主线改为：
+
+```text
+Component-guided Disease Severity Segmentation
+```
+
+优先创新顺序：
+
+```text
+1. Component-aware auxiliary learning
+   预测 lesion mask / lesion boundary / lesion center or distance map。
+   目的: 强化小病斑定位和边界完整性。
+
+2. Severity consistency loss
+   约束预测 lesion/leaf ratio 与 GT lesion/leaf ratio 一致。
+   目的: 让分割结果服务于严重度判断。
+
+3. Severity-aware component-guided attention
+   注意力不能写成普通 SE/CBAM。
+   必须由 lesion / boundary / severity cue 引导，解决“病斑小、边界碎、严重度依赖面积比例”的问题。
+
+4. SCLP
+   只有在 E1.1 或后续强度消融证明有效时，才作为辅助增强保留。
+```
+
+### 阶段 4：新的训练顺序
+
+当前不要马上开新结构训练。顺序改为：
+
+```text
+Step 1:
+等待 E1.1 跑完。
+
+Step 2:
+改代码，保存 best_miou_weights.pth，并新增 severity_metrics.json。
+
+Step 3:
+用统一评价脚本重新导出:
+  B0-V3
+  E1 SCLP 0.7
+  E1.1 SCLP 0.3
+
+Step 4:
+根据 E1.1 结果决定:
+  - 是否补 SCLP 0.1
+  - 是否补 SCLP 0.5
+  - 是否放弃 SCLP 主线
+
+Step 5:
+训练 Component-aware auxiliary head。
+
+Step 6:
+训练 Component-aware auxiliary head + severity consistency loss。
+
+Step 7:
+最后再训练 severity-aware component-guided attention。
+
+Step 8:
+选最终方法后，跑 3 seeds:
+  seed 11
+  seed 22
+  seed 33
+
+Step 9:
+最终 test set 只评一次。
+```
+
+### 纠偏后的实验表格设计
+
+主表：
+
+```text
+Method | Backbone | mIoU | FG mIoU | Dice | PA | Params | FLOPs | FPS | Severity MAE | Severity RMSE
+```
+
+类别表：
+
+```text
+Method | leaf | rust | alternaria | gray | brown
+```
+
+消融表：
+
+```text
+B0-V3
+B0-V3 + SCLP 0.7
+B0-V3 + SCLP 0.3
+B0-V3 + Component Aux
+B0-V3 + Component Aux + Severity Loss
+B0-V3 + Component Aux + Severity Loss + SCA
+```
+
+严重度表：
+
+```text
+Method | MAE | RMSE | Pearson | Spearman | Low Acc | Medium Acc | High Acc
+```
+
+### 当前执行决策
+
+```text
+当前不停止 E1.1。
+当前不马上开启注意力训练。
+当前下一项代码任务应是:
+  1. best_miou checkpoint 保存
+  2. severity metrics 导出
+  3. 统一报告脚本
+```
+
+一句话结论：
+
+```text
+先把实验做可信，再把方法做复杂。
+否则后续所有模块都会被 Reviewer 认为是在负收益增强和混乱评价协议上堆东西。
+```
+
 ```text
 提交: 6a1e330
 标题: Add Ubuntu Python bootstrap script
