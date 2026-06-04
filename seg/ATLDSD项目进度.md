@@ -2670,3 +2670,184 @@ mIoU: 71.72%
 FG mIoU: 66.58%
 brown_spot IoU: 48.42%
 ```
+
+## 2026-06-04 Ubuntu 服务器迁移与代码同步要求
+
+本次已经把项目从“只适合 Windows 本机跑”的状态，改造成 Windows / Ubuntu 都能启动训练的状态。
+
+### 当前项目状态
+
+```text
+GitHub 仓库:
+https://github.com/yezi56/SCLA-Net-ATLDSD
+
+当前主分支:
+main
+
+最新提交:
+6a1e330 Add Ubuntu Python bootstrap script
+56e3a63 Add portable Ubuntu training scripts
+c3dc630 Initial SCLA-Net ATLDSD research code
+```
+
+当前最强 baseline：
+
+```text
+B0-V3
+模型: DeepLabV3+ + MobileNetV3-Large
+训练方式: 普通 6 类语义分割
+增强: 常规增强，无 SCLP
+mIoU: 71.72%
+FG mIoU: 66.58%
+Accuracy: 97.76%
+brown_spot IoU: 48.42%
+```
+
+当前正在跑 / 当前下一步实验：
+
+```text
+E1: B0-V3 + SCLP
+模型结构: DeepLabV3+ + MobileNetV3-Large
+输出方式: 6 类 softmax
+与最强 baseline 的区别: 只增加 SCLP 数据增强
+SCLP: severity-controlled lesion copy-paste
+实验目的: 验证严重度控制病斑复制粘贴是否能提升小病斑、轻症样本和 brown_spot 类别表现
+```
+
+重要判断：
+
+```text
+E1 不是新网络结构。
+E1 是数据增强消融实验。
+如果 E1 超过 B0-V3，说明 SCLP 有价值。
+如果 E1 不超过 B0-V3，则后续需要降低 SCLP 概率，或改进粘贴真实性，再进入注意力/辅助头实验。
+```
+
+### Ubuntu 一键启动能力
+
+新增文件：
+
+```text
+requirements-atldsd.txt
+scripts/bootstrap_ubuntu_miniconda.sh
+scripts/setup_ubuntu_env.sh
+scripts/run_ubuntu.sh
+scripts/run_ubuntu_baseline_v3.sh
+scripts/run_ubuntu_sclp_v3.sh
+.gitattributes
+```
+
+Ubuntu 推荐目录：
+
+```text
+/home/liuzhe/SCLA-Net-ATLDSD
+/home/liuzhe/SCLA-Net-ATLDSD/VOCdevkit/VOC2007
+/home/liuzhe/SCLA-Net-ATLDSD/VOCdevkit/VOC2012
+```
+
+如果数据集不放在项目根目录：
+
+```bash
+export ATLDSD_VOCDEVKIT_PATH=/absolute/path/to/VOCdevkit
+```
+
+有 Python 的服务器：
+
+```bash
+cd /home/liuzhe/SCLA-Net-ATLDSD
+chmod +x scripts/*.sh
+./scripts/setup_ubuntu_env.sh cu121
+./scripts/run_ubuntu.sh sclp
+```
+
+没有 Python 的服务器：
+
+```bash
+cd /home/liuzhe/SCLA-Net-ATLDSD
+chmod +x scripts/*.sh
+./scripts/bootstrap_ubuntu_miniconda.sh
+export PATH="$HOME/miniconda3/bin:$PATH"
+./scripts/setup_ubuntu_env.sh cu121
+./scripts/run_ubuntu.sh sclp
+```
+
+启动 baseline：
+
+```bash
+./scripts/run_ubuntu.sh baseline
+```
+
+启动当前 SCLP 实验：
+
+```bash
+./scripts/run_ubuntu.sh sclp
+```
+
+### 以后代码修改必须遵守的同步规则
+
+后续所有代码修改，都必须同时考虑 Windows 本机和 Ubuntu 服务器两套入口。
+
+必须检查：
+
+```text
+1. Windows 训练脚本是否需要同步修改:
+   scripts/run_atldsd_*.ps1
+
+2. Ubuntu 训练脚本是否需要同步修改:
+   scripts/run_ubuntu*.sh
+
+3. Python 默认路径是否仍然非硬编码:
+   src/atldsd_seg/paths.py
+   src/models/deeplabv3plus/train.py
+   src/atldsd_seg/engine/train_clcs.py
+
+4. README 是否需要同步说明:
+   README.md
+
+5. 变更后是否提交并推送到 GitHub:
+   git commit
+   git push
+```
+
+特别强调：
+
+```text
+以后不能只改 Windows 的 .ps1，不改 Linux 的 .sh。
+也不能只改 Linux 的 .sh，不改 Windows 的 .ps1。
+如果训练参数、模型结构、数据增强、输出目录、依赖项发生变化，Windows 和 Linux 两边都要同步。
+每次 push 到 GitHub 后，必须在笔记里写清楚:
+1. 提交哈希
+2. 修改了哪些文件
+3. 修改目的
+4. 对应哪个实验
+5. Windows / Linux 是否都已同步
+```
+
+### 最近两次 GitHub 上传记录
+
+```text
+提交: 56e3a63
+标题: Add portable Ubuntu training scripts
+目的: 增加 Ubuntu 服务器一键训练能力，去除项目对 D:\Code 和 D:\dataset 的强依赖。
+主要修改:
+- src/atldsd_seg/paths.py
+- src/atldsd_seg/engine/train_clcs.py
+- src/models/deeplabv3plus/train.py
+- requirements-atldsd.txt
+- scripts/setup_ubuntu_env.sh
+- scripts/run_ubuntu.sh
+- scripts/run_ubuntu_baseline_v3.sh
+- scripts/run_ubuntu_sclp_v3.sh
+- README.md
+Windows / Linux 同步状态: 已同步。
+```
+
+```text
+提交: 6a1e330
+标题: Add Ubuntu Python bootstrap script
+目的: 解决 Ubuntu 服务器没有 python3 时无法启动环境安装的问题。
+主要修改:
+- scripts/bootstrap_ubuntu_miniconda.sh
+- README.md
+Windows / Linux 同步状态: Linux 侧新增兜底脚本，Windows 侧不需要对应改动。
+```
