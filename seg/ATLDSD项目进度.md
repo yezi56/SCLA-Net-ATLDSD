@@ -3841,3 +3841,150 @@ E1.1 启动状态：
 对应实验: E1.1
 Windows / Linux 同步状态: 已同步。
 ```
+
+## 2026-06-04 旧链路复核：B4 + CAA + PConv + LBFTLoss
+
+用户提出的旧研究链路：
+
+```text
+DeepLabV3+ + EfficientNet-B4 + CAA + PConv + LBFTLoss
+```
+
+复核结论：
+
+```text
+这条链路有价值，但不适合直接作为下一步主线创新。
+原因是它一次改变了四个变量:
+1. backbone: MobileNetV3-Large -> EfficientNet-B4
+2. attention: 无 -> CAA
+3. decoder convolution: standard conv -> PConv
+4. loss: CE + Dice -> LBFTLoss
+
+如果直接跑完整链路，即使结果提升，也很难说明提升来自哪里。
+审稿人会认为实验因果不清，只是模块堆叠。
+```
+
+已有结果对 B4 不利：
+
+```text
+B0-V3:
+DeepLabV3+ + MobileNetV3-Large
+mIoU = 71.72
+FG mIoU = 66.58
+Accuracy = 97.76
+Params = 11.73M
+FLOPs = 15.28G
+FPS = 98.80
+
+B0-B4:
+DeepLabV3+ + EfficientNet-B4
+mIoU = 65.59
+FG mIoU = 59.59
+Accuracy = 96.44
+Params = 32.48M
+FLOPs = 51.30G
+FPS = 52.77
+
+结论:
+B4 在 ATLDSD 当前设置下更重、更慢、效果更差。
+因此 B4 不应作为主论文默认 backbone。
+```
+
+当前 E2 训练状态：
+
+```text
+实验编号: E2
+模型: DeepLabV3+ + MobileNetV3-Large + Component Auxiliary Heads
+当前训练仍在运行
+epoch50 mIoU = 68.83
+epoch50 mPA = 85.47
+epoch50 Accuracy = 96.75
+
+判断:
+epoch50 低于 B0-V3 的 71.72。
+但 epoch50 后刚进入解冻阶段，val loss 短期上升属于可观察现象。
+不应现在中断，应继续看到 epoch80/100 再判断。
+```
+
+### 修改后的整体训练计划
+
+主论文创新线：
+
+```text
+M0: DeepLabV3+ + MobileNetV3-Large
+作用: 最强普通 6 类 softmax baseline。
+状态: 已完成，当前最强 baseline。
+
+M1: M0 + Component Auxiliary Heads
+作用: 显式学习 lesion mask、boundary、center，解决小病斑定位和边界完整性。
+状态: 正在训练，即 E2。
+
+M2: M1 + Severity Consistency Loss
+作用: 让分割结果不仅追求像素 mIoU，还约束 lesion / leaf 的严重度估计。
+目标: 回应“病害严重度判断”这个任务核心。
+
+M3: M2 + Severity-aware Component-guided Attention
+作用: 只在结构化病斑分支基础上加入注意力，不做泛泛的注意力堆叠。
+目标: 让注意力服务于小病斑、边界、严重度，而不是作为普通模块。
+```
+
+旧链路拆分消融线：
+
+```text
+L0: B0-V3 + PConv
+目的: 单独验证 PConv 是否改善病斑边界和小目标。
+
+L1: B0-V3 + LBFTLoss
+目的: 单独验证 LBFTLoss 是否改善类别不均衡和小病斑 IoU。
+
+L2: B0-V3 + PConv + LBFTLoss
+目的: 验证 decoder 改造与 loss 改造是否互补。
+
+L3: B0-V3 + CAA + PConv + LBFTLoss
+目的: 验证 CAA 在轻量 V3 backbone 上是否仍有收益。
+
+L4: EfficientNet-B4 + CAA + PConv + LBFTLoss
+目的: 作为“旧完整链路 / strong engineering comparator”，用于证明新主线不是简单复刻旧模块堆叠。
+```
+
+和 E2 的结合策略：
+
+```text
+如果 E2 best mIoU < 70.5 且 severity MAE 没有改善:
+  先调整 component auxiliary 权重，不加 PConv / LBFTLoss。
+
+如果 E2 best mIoU 在 70.5 到 71.72 之间，或 severity MAE 明显改善:
+  跑 E2 + PConv
+  跑 E2 + LBFTLoss
+  再判断是否跑 E2 + PConv + LBFTLoss。
+
+如果 E2 超过 B0-V3:
+  先进入 M2: Severity Consistency Loss。
+  PConv / LBFTLoss 只作为后续增强或附加消融。
+```
+
+论文写法调整：
+
+```text
+主创新不写成 CAA、PConv、LBFTLoss。
+主创新写成:
+Component-aware and severity-consistent lesion segmentation for ATLDSD。
+
+CAA、PConv、LBFTLoss 的定位:
+1. 对比旧链路
+2. 工程增强
+3. 可插拔消融
+
+这样更容易通过审稿:
+不是“堆模块”，而是先提出面向病害严重度的结构化建模，再证明传统模块是否能进一步增强。
+```
+
+下一步优先级：
+
+```text
+1. 不打断 E2，等到至少 epoch80/100。
+2. E2 完成后导出 best_miou checkpoint 的 segmentation + severity report。
+3. 若 E2 不达标，先调 auxiliary weights。
+4. 若 E2 有保留价值，再跑 L0 / L1 这种单变量实验。
+5. 最后才跑完整旧链路 L4。
+```
