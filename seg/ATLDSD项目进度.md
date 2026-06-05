@@ -292,6 +292,66 @@ D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_pcon
 只做旧链路强对照。
 ```
 
+## 8.5 2025/2026 文献反馈后的计划修正
+
+研究方向重新压缩为：
+
+```text
+Component-aware lightweight apple leaf disease lesion segmentation for severity estimation.
+```
+
+近两年相关工作的共同点：
+
+| 相关工作方向 | 可借鉴点 | 对当前训练计划的影响 |
+|---|---|---|
+| 2025 苹果叶病斑分割 ALDNet | leaf-aware / spot-aware 比盲目 6 类分割更有解释性 | 保留主线1的 lesion、boundary、center 组件辅助头 |
+| 2025 STAR-Net 类番茄叶病分割 | 多分支注意力要服务复杂病斑，而不是泛泛加注意力 | 主线3不能只写“加 CAA”，要观察是否真正改善病斑区域 |
+| 2025 Sparse-MoE-SAM 类植物病害分割 | local/global 稀疏注意力适合异质病斑 | 如果普通 CAA 无效，再考虑 component-guided attention |
+| 2025 PDSNets 类严重度估计 | 严重度论文重视速度和部署，不只看 mIoU | 每个实验必须记录 Params、FLOPs、FPS、severity MAE |
+| 2026 严重度分类相关工作 | 严重度判断通常需要区分 leaf / lesion / background | 保留 lesion / leaf 严重度指标，但 severity loss 仍是附加实验 |
+
+参考链接：
+
+```text
+ALDNet, Measurement 2025:
+https://www.sciencedirect.com/science/article/pii/S0263224125010656
+
+STAR-Net, Frontiers in Plant Science 2026:
+https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2025.1706072/full
+
+Sparse-MoE-SAM, Plants 2025:
+https://www.mdpi.com/3462676
+
+Citrus severity semantic segmentation, Scientific Reports 2025:
+https://www.nature.com/articles/s41598-025-04758-y
+
+Pome leaf multi-disease severity, Scientific Reports 2026:
+https://www.nature.com/articles/s41598-026-45947-7
+```
+
+反馈到训练计划：
+
+```text
+1. 当前主线2继续跑完。
+2. 主线2结束后，先判断 PConv 是否保留。
+3. 主线3仍然可以跑 CAA，但它是受控注意力实验，不是主创新本身。
+4. 如果普通 CAA 不明显提升，不继续堆注意力；改为设计 component-guided attention。
+5. 附加实验A已经证明 severity MAE 改善，但它仍然是 loss 消融，不提升为主线。
+6. 后续结果表必须同时看:
+   mIoU
+   FG mIoU
+   difficult lesion class IoU
+   severity MAE
+   grade accuracy
+   Params / FLOPs / FPS
+```
+
+正式执行计划已保存：
+
+```text
+docs\superpowers\plans\2026-06-05-literature-informed-training-plan.md
+```
+
 ## 9. 论文主线
 
 建议论文逻辑：
