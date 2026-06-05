@@ -16,20 +16,31 @@ Accuracy = 97.97
 Severity MAE = 0.01177
 Grade Acc = 93.90
 
-当前正在跑:
-边界2 = 主线1 + PConv + LBSB。
+最新完成:
+边界2 = 主线1 + PConv + LBSB 已完成 150 epoch。
 
-PID:
-8124
+结果:
+mIoU = 71.68
+FG mIoU = 66.54
+Accuracy = 97.72
+Severity MAE = 0.01281
+Grade Acc = 93.50
+Params = 10.65M
+FLOPs = 6.52G
+FPS = 39.81
 
-启动时间:
-2026-06-05 16:15
+结论:
+PConv 与 LBSB 没有形成互补。
+边界2低于边界1，也低于主线1。
+后续最终模型不保留 PConv。
+当前最强仍然是:
+主线1 + LBSB
+
+完成时间:
+2026-06-05 19:00
 
 输出目录:
 D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_pconv_lbsb_150
-
-目的:
-判断 PConv 虽然单独弱于主线1，但是否能和 LBSB 互补。
 
 Windows 启动脚本:
 D:\Code\ATLDSD\scripts\run_atldsd_deeplabv3plus_mobilenetv3_large_component_aux_pconv_lbsb_150.ps1
@@ -224,7 +235,7 @@ D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_lbsb
 | 附加实验A | 主线1 + Severity Consistency Loss | 72.12 | 67.06 | 97.78 | 0.01147 | 93.90 | mIoU 基本持平，严重度 MAE 更好 |
 | 主线2 | 主线1 + PConv | 71.76 | 66.62 | 97.80 | 0.01373 | 93.09 | 更轻但精度下降，需测试 PConv+LBSB 互补 |
 | 边界1 | 主线1 + LBSB | 72.86 | 67.89 | 97.97 | 0.01177 | 93.90 | 当前最高 mIoU，LBSB 单独有效 |
-| 边界2 | 主线1 + PConv + LBSB | 运行中 | 运行中 | 运行中 | 运行中 | 运行中 | 验证 PConv 与 LBSB 是否互补 |
+| 边界2 | 主线1 + PConv + LBSB | 71.68 | 66.54 | 97.72 | 0.01281 | 93.50 | 未超过边界1，PConv 不保留 |
 | B4 baseline | DeepLabV3+ + EfficientNet-B4 | 65.59 | 59.59 | 96.44 | 未主用 | 未主用 | 更重更差，弃作主干 |
 | SCLP 0.7 | 主线0 + 强 copy-paste | 68.97 | 未主用 | 未主用 | 未主用 | 未主用 | 失败增强 |
 | SCLP 0.3 | 主线0 + 弱 copy-paste | 69.90 | 未主用 | 未主用 | 未主用 | 未主用 | 仍低于主线0 |
