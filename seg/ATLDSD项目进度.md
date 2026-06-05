@@ -400,6 +400,270 @@ https://www.nature.com/articles/s41598-026-45947-7
 docs\superpowers\plans\2026-06-05-literature-informed-training-plan.md
 ```
 
+### 顶会小创新点：直接反馈到训练计划
+
+下面这些不是“泛泛借鉴”，而是可以拿到当前代码里做的小模块。优先级从高到低。
+
+| 优先级 | 顶会来源 | 可借鉴小创新 | 放到本项目哪里 | 对应训练 |
+|---|---|---|---|---|
+| 1 | WACV 2025 COSNet | Boundary Feature Sharpening | decoder 融合后或 boundary auxiliary head 前 | 主线2之后的边界增强候选 |
+| 2 | WACV 2025 CCASeg | Convolutional Cross-Attention Decoder | low-level / high-level feature fusion 处 | 主线3优先替代普通 CAA |
+| 3 | CVPR 2025 SegMAN | Local attention + global context 的轻量组合 | ASPP 后或 decoder fusion 后 | 主线3的第二候选 |
+| 4 | CVPR 2025 biomarker decoder | Depth-to-Space / PixelShuffle restoration | 替代 bilinear upsample | 如果主线2边界提升弱，再跑 |
+| 5 | CVPR 2025 ResCLIP | Semantic Feedback Refinement | 用 lesion/boundary/center 概率反向调制 decoder feature | 主线4或 component-guided attention |
+
+#### 可直接实现的候选1：Boundary Feature Sharpening
+
+来源启发：
+
+```text
+WACV 2025 COSNet 使用 feature sharpening 和 boundary enhancement 强化边界。
+它的核心思想很适合 ATLDSD:
+病斑小、边界不规则、容易被叶片纹理淹没。
+```
+
+本项目怎么用：
+
+```text
+模块名:
+Lesion Boundary Sharpening Block, LBSB
+
+插入位置:
+DeepLabV3+ decoder 融合后的特征上。
+
+实现方式:
+blur = avg_pool(feature)
+edge = feature - blur
+gate = sigmoid(conv(boundary_aux_logits))
+feature_refined = feature + alpha * edge * gate
+
+训练标签:
+不用新增人工标注，直接复用现有 boundary auxiliary target。
+```
+
+进入训练计划：
+
+```text
+如果主线2 PConv 没有超过主线1:
+  下一步不要急着跑普通 CAA。
+  优先跑: 主线1 + LBSB
+
+如果主线2 PConv 超过主线1:
+  跑: 主线2 + LBSB
+```
+
+为什么适合你：
+
+```text
+它比“加注意力”更像病斑任务创新。
+因为它明确解决 lesion boundary，而不是泛泛增强特征。
+```
+
+#### 可直接实现的候选2：Convolutional Cross-Attention Decoder
+
+来源启发：
+
+```text
+WACV 2025 CCASeg 的重点是 decoder 里用 convolutional cross-attention 融合多尺度上下文。
+它不是普通 Transformer attention，而是用卷积核捕获不同尺度上下文，计算更轻。
+```
+
+本项目怎么用：
+
+```text
+模块名:
+Lesion Cross-Attention Fusion, LCAF
+
+插入位置:
+DeepLabV3+ low-level feature 和 ASPP high-level feature 融合前。
+
+实现方式:
+query = conv1x1(low_level_feature)
+key   = depthwise_conv3x3(high_level_feature)
+value = depthwise_conv5x5(high_level_feature)
+attention = sigmoid(query * key)
+fused = concat(low_level_feature, attention * value)
+
+可选组件引导:
+attention = attention * sigmoid(lesion_aux_logits + boundary_aux_logits)
+```
+
+进入训练计划：
+
+```text
+主线3不要只写“主线1 + CAA”。
+更具体地改成:
+主线3 = 主线1 + LCAF
+
+普通 CAA 降级为对照:
+附加实验D = 主线1 + CAA
+```
+
+为什么适合你：
+
+```text
+ATLDSD 的关键是低层边缘纹理 + 高层病害语义对齐。
+LCAF 正好针对这个融合点。
+```
+
+#### 可直接实现的候选3：Local-Global Context Block
+
+来源启发：
+
+```text
+CVPR 2025 SegMAN 强调 segmentation 同时需要:
+local detail
+global context
+multi-scale feature
+```
+
+本项目怎么用一个轻量版本：
+
+```text
+模块名:
+Local-Global Lesion Context Block, LGLC
+
+插入位置:
+ASPP 输出后，进入 decoder 前。
+
+实现方式:
+local = depthwise_conv3x3(feature)
+strip_h = depthwise_conv1x7(feature)
+strip_w = depthwise_conv7x1(feature)
+global = upsample(conv(global_avg_pool(feature)))
+out = conv1x1(concat(local, strip_h, strip_w, global))
+```
+
+进入训练计划：
+
+```text
+如果主线2 PConv 有效:
+  主线4候选 = 主线2 + LGLC
+
+如果主线2 PConv 无效:
+  用 LGLC 替代 PConv 作为新的 decoder/context 模块。
+```
+
+为什么适合你：
+
+```text
+小病斑需要 local detail。
+严重度估计又需要整片叶子的 global context。
+LGLC 比单纯 CAA 更贴合 lesion / leaf 比例任务。
+```
+
+#### 可直接实现的候选4：PixelShuffle Restoration Decoder
+
+来源启发：
+
+```text
+CVPR 2025 biomarker segmentation 方向重新思考 decoder，
+用 restoration-style decoder 保护小结构边界。
+```
+
+本项目怎么用：
+
+```text
+模块名:
+PixelShuffle Lesion Restoration Decoder, PLRD
+
+插入位置:
+替换 decoder 中 bilinear upsample + conv 的局部恢复部分。
+
+实现方式:
+conv 输出 4C 通道
+PixelShuffle(2) 上采样
+再接 depthwise separable conv
+```
+
+进入训练计划：
+
+```text
+不要现在就跑。
+当主线2 PConv 边界提升不明显时，再跑:
+主线1 + PLRD
+```
+
+为什么适合你：
+
+```text
+病斑是小目标，普通双线性上采样容易糊边界。
+PixelShuffle 更像恢复任务，可能更适合病斑边缘。
+```
+
+#### 可直接实现的候选5：Semantic Feedback Refinement
+
+来源启发：
+
+```text
+CVPR 2025 ResCLIP 使用 semantic feedback refinement，
+用已有语义预测反过来调整注意力/空间响应。
+```
+
+本项目怎么用：
+
+```text
+模块名:
+Component Feedback Refinement, CFR
+
+插入位置:
+最终 segmentation logits 前。
+
+实现方式:
+component_map = sigmoid(lesion_logits) + sigmoid(boundary_logits) + sigmoid(center_logits)
+refine_gate = sigmoid(conv(component_map))
+seg_logits_refined = seg_logits + beta * refine_gate * conv(decoder_feature)
+```
+
+进入训练计划：
+
+```text
+主线4不要简单等于 PConv + CAA。
+更好的最终候选:
+主线4 = 最优结构 + CFR
+```
+
+为什么适合你：
+
+```text
+你已经有 lesion / boundary / center 三个辅助头。
+CFR 可以把辅助头从“只算 loss”升级成“参与推理的反馈模块”。
+这比单纯辅助监督更像模型结构创新。
+```
+
+#### 修正后的训练顺序
+
+```text
+正在跑:
+主线2 = 主线1 + PConv
+
+主线2结束后:
+如果 PConv 明显提升:
+  下一步跑 主线2 + LBSB
+
+如果 PConv 不提升:
+  下一步跑 主线1 + LBSB
+
+然后:
+跑 主线1 + LCAF
+
+最后:
+把最好的 decoder/boundary 模块与 CFR 组合，形成最终模型。
+
+普通 CAA:
+降级为对照实验，不再作为主线3默认方案。
+```
+
+这次真正从顶会拿来的可用点是：
+
+```text
+1. 边界锐化: LBSB
+2. 卷积交叉注意力融合: LCAF
+3. 局部-全局上下文块: LGLC
+4. PixelShuffle 恢复式 decoder: PLRD
+5. 组件反馈细化: CFR
+```
+
 ## 9. 论文主线
 
 建议论文逻辑：
