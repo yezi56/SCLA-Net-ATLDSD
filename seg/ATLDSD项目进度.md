@@ -300,6 +300,54 @@ D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_pcon
 Component-aware lightweight apple leaf disease lesion segmentation for severity estimation.
 ```
 
+### 重点借鉴了什么
+
+不是照搬某一篇模型，而是抽取近两年高水平工作的共同有效设计，反馈到 ATLDSD 的训练计划里：
+
+```text
+借鉴点1: leaf / lesion / spot 分开建模
+来源启发: ALDNet 等苹果叶病斑分割工作强调 leaf-aware、spot-aware。
+落到本项目: 坚持主线1的 lesion / boundary / center 辅助头。
+意义: 不让网络只做普通 6 类 softmax，而是显式学习病斑组件。
+```
+
+```text
+借鉴点2: 小病斑和边界需要 decoder 局部增强
+来源启发: 近年植物病害分割普遍强化多尺度、边界和局部纹理。
+落到本项目: 当前主线2优先跑 PConv decoder。
+意义: PConv 不是随便加模块，而是为小病斑、边界、不规则局部纹理服务。
+```
+
+```text
+借鉴点3: 注意力不能泛泛堆，要看是否真正服务病斑区域
+来源启发: STAR-Net、Sparse-MoE-SAM 类工作强调注意力/稀疏专家对复杂病斑区域的选择性响应。
+落到本项目: 主线3先跑 CAA 作为受控实验；如果普通 CAA 无效，不继续堆注意力，转向 component-guided attention。
+意义: 注意力必须被 lesion / boundary / center 组件信息约束，否则不作为主创新。
+```
+
+```text
+借鉴点4: 严重度论文不只看 mIoU，还看部署和 severity 指标
+来源启发: 2025/2026 严重度估计工作重视 severity、速度、轻量化。
+落到本项目: 每个实验必须同时记录 mIoU、FG mIoU、severity MAE、grade accuracy、Params、FLOPs、FPS。
+意义: 论文不只证明“分割准”，还要证明“严重度判断有用、模型足够轻”。
+```
+
+因此后续训练计划的重点不是：
+
+```text
+DeepLabV3+ + 一堆模块
+```
+
+而是：
+
+```text
+主线1: 组件建模
+主线2: decoder 局部增强
+主线3: 受控注意力验证
+主线4: 组件 + 局部 + 注意力的最终组合
+附加实验: severity / LBFTLoss 只做 loss 消融
+```
+
 近两年相关工作的共同点：
 
 | 相关工作方向 | 可借鉴点 | 对当前训练计划的影响 |
