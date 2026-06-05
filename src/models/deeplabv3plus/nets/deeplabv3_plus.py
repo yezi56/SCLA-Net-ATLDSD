@@ -268,6 +268,42 @@ class LesionBoundarySharpeningBlock(nn.Module):
         return feature + self.alpha * edge * gate
 
 
+class LesionAwareCrossScaleFusion(nn.Module):
+    """Cross-scale gates between high-level lesion semantics and low-level edges."""
+
+    def __init__(self, high_channels=256, low_channels=48, alpha=0.5, bn_mom=0.1):
+        super().__init__()
+        self.alpha = alpha
+        self.high_to_low = nn.Sequential(
+            nn.Conv2d(high_channels, low_channels, 1, bias=False),
+            nn.BatchNorm2d(low_channels, momentum=bn_mom),
+            nn.Sigmoid(),
+        )
+        self.low_to_high = nn.Sequential(
+            nn.Conv2d(low_channels, high_channels, 1, bias=False),
+            nn.BatchNorm2d(high_channels, momentum=bn_mom),
+            nn.Sigmoid(),
+        )
+        self.lesion_spatial = nn.Sequential(
+            nn.Conv2d(high_channels, 1, 1, bias=True),
+            nn.Sigmoid(),
+        )
+        self.low_edge = nn.Sequential(
+            nn.Conv2d(low_channels, low_channels, 3, padding=1, groups=low_channels, bias=False),
+            nn.BatchNorm2d(low_channels, momentum=bn_mom),
+            nn.Conv2d(low_channels, low_channels, 1, bias=False),
+            nn.BatchNorm2d(low_channels, momentum=bn_mom),
+        )
+
+    def forward(self, high_feature, low_feature):
+        low_gate = self.high_to_low(high_feature)
+        high_gate = self.low_to_high(low_feature)
+        lesion_gate = self.lesion_spatial(high_feature)
+        high_feature = high_feature * (1.0 + self.alpha * high_gate)
+        low_feature = low_feature * (1.0 + self.alpha * low_gate) + self.alpha * lesion_gate * self.low_edge(low_feature)
+        return high_feature, low_feature
+
+
 class DeepLab(nn.Module):
     def __init__(
         self,
@@ -286,10 +322,13 @@ class DeepLab(nn.Module):
         use_component_aux=False,
         use_lbsb=False,
         lbsb_alpha=0.25,
+        use_lcaf=False,
+        lcaf_alpha=0.5,
     ):
         super().__init__()
         self.use_component_aux = use_component_aux
         self.use_lbsb = use_lbsb
+        self.use_lcaf = use_lcaf
 
         self.backbone, in_channels, low_level_channels = build_backbone(
             backbone,
@@ -314,6 +353,7 @@ class DeepLab(nn.Module):
             nn.BatchNorm2d(48),
             nn.ReLU(inplace=True),
         )
+        self.lcaf = LesionAwareCrossScaleFusion(256, 48, alpha=lcaf_alpha) if use_lcaf else nn.Identity()
 
         self.cat_conv = nn.Sequential(
             DecoderConvBlock(48 + 256, 256, decoder_conv_type),
@@ -342,6 +382,8 @@ class DeepLab(nn.Module):
         low_level_features = self.shortcut_conv(low_level_features)
 
         x = F.interpolate(x, size=(low_level_features.size(2), low_level_features.size(3)), mode="bilinear", align_corners=True)
+        if self.use_lcaf:
+            x, low_level_features = self.lcaf(x, low_level_features)
         x = self.cat_conv(torch.cat((x, low_level_features), dim=1))
         x = self.attention_decoder(x)
         if self.use_lbsb:

@@ -26,11 +26,14 @@ case "${MODE}" in
   component_aux_pconv_lbsb|pconv_lbsb|boundary2)
     exec "${SCRIPT_DIR}/run_ubuntu_component_aux_pconv_lbsb_v3.sh"
     ;;
+  component_aux_lbsb_lcaf|lbsb_lcaf|lcaf|fusion1)
+    exec "${SCRIPT_DIR}/run_ubuntu_component_aux_lbsb_lcaf_v3.sh"
+    ;;
   component_aux_severity|severity|m2|e3)
     exec "${SCRIPT_DIR}/run_ubuntu_component_aux_severity_v3.sh"
     ;;
   *)
-    echo "Usage: $0 [baseline|sclp|sclp03|component_aux|component_aux_pconv|component_aux_lbsb|component_aux_pconv_lbsb|component_aux_severity]" >&2
+    echo "Usage: $0 [baseline|sclp|sclp03|component_aux|component_aux_pconv|component_aux_lbsb|component_aux_pconv_lbsb|component_aux_lbsb_lcaf|component_aux_severity]" >&2
     exit 2
     ;;
 esac

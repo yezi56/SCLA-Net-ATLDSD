@@ -13,3 +13,4 @@
 | Mainline2 | Mainline1 + PConv | decoder locality | done | 71.76 | 66.62 | 0.01373 | 93.09 | 10.65 | 6.51 | lighter; test PConv+LBSB synergy |
 | Boundary1 | Mainline1 + LBSB | boundary sharpening | done | 72.86 | 67.89 | 0.01177 | 93.90 | 11.73 | 15.29 | best mIoU; promote to current best |
 | Boundary2 | Mainline1 + PConv + LBSB | decoder locality + boundary sharpening | done | 71.68 | 66.54 | 0.01281 | 93.50 | 10.65 | 6.52 | no PConv-LBSB synergy; do not keep PConv |
+| Fusion1 | Mainline1 + LBSB + LCAF | lesion-aware cross-scale fusion | running | - | - | - | - | - | - | running; test cross-scale fusion after LBSB |

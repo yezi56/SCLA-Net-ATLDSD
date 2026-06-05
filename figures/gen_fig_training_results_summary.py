@@ -183,6 +183,21 @@ ROWS = [
         "fps": 39.81,
         "decision": "no PConv-LBSB synergy; do not keep PConv",
     },
+    {
+        "id": "Fusion1",
+        "method": "Mainline1 + LBSB + LCAF",
+        "change": "lesion-aware cross-scale fusion",
+        "status": "running",
+        "miou": None,
+        "fg_miou": None,
+        "acc": None,
+        "severity_mae": None,
+        "grade_acc": None,
+        "params_m": None,
+        "flops_g": None,
+        "fps": None,
+        "decision": "running; test cross-scale fusion after LBSB",
+    },
 ]
 
 
@@ -377,7 +392,7 @@ def plot_model_tradeoff(rows):
             "line": "-",
         },
         {
-            "ids": ["Mainline1", "Mainline2", "Boundary1", "Boundary2"],
+            "ids": ["Mainline1", "Mainline2", "Boundary1", "Boundary2", "Fusion1"],
             "color": "#1D4E89",
             "label": "Decoder/boundary path",
             "marker": "o",

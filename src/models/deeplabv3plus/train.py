@@ -113,6 +113,8 @@ def parse_args():
     parser.add_argument("--component-center-weight", type=float, default=0.2)
     parser.add_argument("--lesion-boundary-sharpen", type=str2bool, default=False, help="Use Lesion Boundary Sharpening Block after decoder fusion.")
     parser.add_argument("--lesion-boundary-sharpen-alpha", type=float, default=0.25)
+    parser.add_argument("--lesion-cross-scale-fusion", type=str2bool, default=False, help="Use Lesion-aware Cross-scale Attention Fusion before decoder concat.")
+    parser.add_argument("--lesion-cross-scale-fusion-alpha", type=float, default=0.5)
     parser.add_argument("--severity-consistency-loss", type=str2bool, default=False, help="Constrain predicted lesion/leaf ratio to match ground truth severity.")
     parser.add_argument("--severity-consistency-weight", type=float, default=0.1)
     parser.add_argument("--severity-loss-type", type=str, default="l1", choices=["l1", "smooth_l1", "mse"])
@@ -231,6 +233,10 @@ def auto_export_report(args, dataset_path):
         str(args.lesion_boundary_sharpen).lower(),
         "--lesion-boundary-sharpen-alpha",
         str(args.lesion_boundary_sharpen_alpha),
+        "--lesion-cross-scale-fusion",
+        str(args.lesion_cross_scale_fusion).lower(),
+        "--lesion-cross-scale-fusion-alpha",
+        str(args.lesion_cross_scale_fusion_alpha),
         "--downsample-factor",
         str(args.downsample_factor),
         "--decoder-conv-type",
@@ -314,6 +320,8 @@ if __name__ == "__main__":
         use_component_aux=args.component_aux,
         use_lbsb=args.lesion_boundary_sharpen,
         lbsb_alpha=args.lesion_boundary_sharpen_alpha,
+        use_lcaf=args.lesion_cross_scale_fusion,
+        lcaf_alpha=args.lesion_cross_scale_fusion_alpha,
     )
     if not args.pretrained:
         weights_init(model)
@@ -428,6 +436,8 @@ if __name__ == "__main__":
             component_center_weight=args.component_center_weight,
             lesion_boundary_sharpen=args.lesion_boundary_sharpen,
             lesion_boundary_sharpen_alpha=args.lesion_boundary_sharpen_alpha,
+            lesion_cross_scale_fusion=args.lesion_cross_scale_fusion,
+            lesion_cross_scale_fusion_alpha=args.lesion_cross_scale_fusion_alpha,
             severity_consistency_loss=args.severity_consistency_loss,
             severity_consistency_weight=args.severity_consistency_weight,
             severity_loss_type=args.severity_loss_type,
