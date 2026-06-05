@@ -157,16 +157,16 @@ ROWS = [
         "id": "Boundary1",
         "method": "Mainline1 + LBSB",
         "change": "boundary sharpening",
-        "status": "running",
-        "miou": None,
-        "fg_miou": None,
-        "acc": None,
-        "severity_mae": None,
-        "grade_acc": None,
-        "params_m": None,
-        "flops_g": None,
-        "fps": None,
-        "decision": "running; update after completion",
+        "status": "done",
+        "miou": 72.86,
+        "fg_miou": 67.89,
+        "acc": 97.97,
+        "severity_mae": 0.01177,
+        "grade_acc": 93.90,
+        "params_m": 11.73,
+        "flops_g": 15.29,
+        "fps": 106.89,
+        "decision": "best mIoU; promote to current best",
     },
 ]
 
@@ -250,6 +250,8 @@ def plot_miou(rows):
             colors[i] = "#E76F51"
         if r["id"] == "Mainline2":
             colors[i] = "#E9C46A"
+        if r["id"] == "Boundary1":
+            colors[i] = "#D62828"
 
     fig, ax = plt.subplots(figsize=(8.4, 4.2))
     y = np.arange(len(labels))
@@ -259,7 +261,7 @@ def plot_miou(rows):
     ax.invert_yaxis()
     ax.set_xlabel("mIoU (%)")
     ax.set_title("ATLDSD Training Results: mIoU Comparison", weight="bold")
-    ax.axvline(72.11, color="#2A9D8F", linestyle="--", linewidth=1.2, alpha=0.8, label="Mainline1")
+    ax.axvline(72.86, color="#D62828", linestyle="--", linewidth=1.2, alpha=0.8, label="Boundary1")
     for idx, value in enumerate(values):
         ax.text(value + 0.15, idx, f"{value:.2f}", va="center", fontsize=8.5)
     ax.set_xlim(max(min(values) - 3.0, 55), max(values) + 2.2)
@@ -360,9 +362,9 @@ def plot_model_tradeoff(rows):
             "line": "-",
         },
         {
-            "ids": ["Mainline1", "Mainline2"],
+            "ids": ["Mainline1", "Mainline2", "Boundary1"],
             "color": "#1D4E89",
-            "label": "PConv decoder",
+            "label": "Decoder/boundary path",
             "marker": "o",
             "line": "-",
         },
@@ -391,6 +393,7 @@ def plot_model_tradeoff(rows):
         "Mainline1": (0.26, 0.16),
         "Aux-A": (0.24, 0.34),
         "Mainline2": (-1.65, -0.28),
+        "Boundary1": (0.28, 0.16),
     }
     for r in rows_with_cost:
         dx, dy = offsets.get(r["id"], (0.2, 0.2))

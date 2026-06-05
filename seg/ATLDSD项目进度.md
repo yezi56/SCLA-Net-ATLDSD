@@ -6,6 +6,23 @@
 ## 0. 当前结论
 
 ```text
+最新结论，2026-06-05 12:29:
+边界1 = 主线1 + LBSB 已完成 150 epoch。
+当前最强结构已经从“主线1”更新为“主线1 + LBSB”。
+
+当前最高 mIoU = 72.86
+FG mIoU = 67.89
+Accuracy = 97.97
+Severity MAE = 0.01177
+Grade Acc = 93.90
+
+下一步:
+跑边界2 = 主线1 + PConv + LBSB。
+目的:
+判断 PConv 虽然单独弱于主线1，但是否能和 LBSB 互补。
+```
+
+```text
 当前最强普通 baseline:
 主线0 = DeepLabV3+ + MobileNetV3-Large
 mIoU = 71.72
@@ -141,12 +158,54 @@ D:\Code\ATLDSD\figures\gen_fig_training_results_summary.py
 D:\Code\ATLDSD\outputs\atldsd\summary\fig_training_model_tradeoff.png
 ```
 
+最新完成结果：
+
+```text
+2026-06-05 12:29
+边界1 = 主线1 + LBSB 已完成 150 epoch。
+
+验证集:
+split = val
+num_images = 246
+
+结果:
+mIoU = 72.86
+FG mIoU = 67.89
+Accuracy = 97.97
+Severity MAE = 0.01177
+Grade Acc = 93.90
+Params = 11.73M
+FLOPs = 15.29G
+FPS = 106.89
+
+结论:
+边界1超过主线1的 mIoU 72.11，当前最强结构更新为:
+主线1 + LBSB
+
+相对主线1:
+mIoU: 72.11 -> 72.86, +0.75
+FG mIoU: 67.03 -> 67.89, +0.86
+Severity MAE: 0.01212 -> 0.01177, 下降 0.00035
+
+类别 IoU:
+background = 97.71
+leaf = 94.05
+rust = 81.47
+alternaria_leaf_spot = 51.14
+gray_spot = 60.20
+brown_spot = 52.61
+
+报告目录:
+D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_lbsb_150\reports\best_miou
+```
+
 | 实验 | 结构 | mIoU | FG mIoU | Acc | Severity MAE | Grade Acc | 结论 |
 |---|---|---:|---:|---:|---:|---:|---|
 | 主线0 | DeepLabV3+ + MobileNetV3-Large | 71.72 | 66.58 | 97.76 | 约0.0124 | 约95.12 | 最强普通 baseline |
 | 主线1 | 主线0 + Component Auxiliary Heads | 72.11 | 67.03 | 97.82 | 0.01212 | 94.31 | 当前最强结构起点 |
 | 附加实验A | 主线1 + Severity Consistency Loss | 72.12 | 67.06 | 97.78 | 0.01147 | 93.90 | mIoU 基本持平，严重度 MAE 更好 |
 | 主线2 | 主线1 + PConv | 71.76 | 66.62 | 97.80 | 0.01373 | 93.09 | 更轻但精度下降，需测试 PConv+LBSB 互补 |
+| 边界1 | 主线1 + LBSB | 72.86 | 67.89 | 97.97 | 0.01177 | 93.90 | 当前最高 mIoU，LBSB 单独有效 |
 | B4 baseline | DeepLabV3+ + EfficientNet-B4 | 65.59 | 59.59 | 96.44 | 未主用 | 未主用 | 更重更差，弃作主干 |
 | SCLP 0.7 | 主线0 + 强 copy-paste | 68.97 | 未主用 | 未主用 | 未主用 | 未主用 | 失败增强 |
 | SCLP 0.3 | 主线0 + 弱 copy-paste | 69.90 | 未主用 | 未主用 | 未主用 | 未主用 | 仍低于主线0 |
