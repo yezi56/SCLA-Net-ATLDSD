@@ -17,11 +17,14 @@ case "${MODE}" in
   component_aux|e2)
     exec "${SCRIPT_DIR}/run_ubuntu_component_aux_v3.sh"
     ;;
+  component_aux_pconv|pconv|mainline2)
+    exec "${SCRIPT_DIR}/run_ubuntu_component_aux_pconv_v3.sh"
+    ;;
   component_aux_severity|severity|m2|e3)
     exec "${SCRIPT_DIR}/run_ubuntu_component_aux_severity_v3.sh"
     ;;
   *)
-    echo "Usage: $0 [baseline|sclp|sclp03|component_aux|component_aux_severity]" >&2
+    echo "Usage: $0 [baseline|sclp|sclp03|component_aux|component_aux_pconv|component_aux_severity]" >&2
     exit 2
     ;;
 esac

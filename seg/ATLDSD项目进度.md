@@ -1,6 +1,6 @@
 # ATLDSD 训练路线笔记
 
-更新时间：2026-06-04 23:15  
+更新时间：2026-06-05 08:56  
 用途：项目交接。下一个 AI 只读这份笔记，就能知道当前训练走到哪、为什么这么走、下一步该做什么。
 
 ## 0. 当前结论
@@ -16,12 +16,14 @@ mIoU = 72.11
 相对主线0提升 +0.39
 
 当前正在训练:
-附加实验A = 主线1 + Severity Consistency Loss
-它是 loss 消融，不是主结构创新。
-
-下一步真正主线:
 主线2 = 主线1 + PConv
 只改 decoder_conv_type: standard -> pconv
+
+刚完成:
+附加实验A = 主线1 + Severity Consistency Loss
+best mIoU = 72.12
+Severity MAE = 0.01147
+它是 loss 消融，不是主结构创新。
 ```
 
 重要纠偏：
@@ -87,7 +89,7 @@ D:\soft\obsidian_notion\seg\ATLDSD项目进度.md
 
 | 编号 | 结构 | 定位 | 状态 |
 |---|---|---|---|
-| 附加实验A | 主线1 + Severity Consistency Loss | loss 消融 | 正在训练 |
+| 附加实验A | 主线1 + Severity Consistency Loss | loss 消融 | 已完成 |
 | 附加实验B | 主线1 + LBFTLoss | loss 对照 | 待跑 |
 | 附加实验C | EfficientNet-B4 + CAA + PConv + LBFTLoss | 旧链路强对照 | 待跑 |
 
@@ -97,6 +99,7 @@ D:\soft\obsidian_notion\seg\ATLDSD项目进度.md
 |---|---|---:|---:|---:|---:|---:|---|
 | 主线0 | DeepLabV3+ + MobileNetV3-Large | 71.72 | 66.58 | 97.76 | 约0.0124 | 约95.12 | 最强普通 baseline |
 | 主线1 | 主线0 + Component Auxiliary Heads | 72.11 | 67.03 | 97.82 | 0.01212 | 94.31 | 当前最强结构起点 |
+| 附加实验A | 主线1 + Severity Consistency Loss | 72.12 | 67.06 | 97.78 | 0.01147 | 93.90 | mIoU 基本持平，严重度 MAE 更好 |
 | B4 baseline | DeepLabV3+ + EfficientNet-B4 | 65.59 | 59.59 | 96.44 | 未主用 | 未主用 | 更重更差，弃作主干 |
 | SCLP 0.7 | 主线0 + 强 copy-paste | 68.97 | 未主用 | 未主用 | 未主用 | 未主用 | 失败增强 |
 | SCLP 0.3 | 主线0 + 弱 copy-paste | 69.90 | 未主用 | 未主用 | 未主用 | 未主用 | 仍低于主线0 |
@@ -125,44 +128,41 @@ FPS = 101.10
 
 ```text
 当前实验:
-附加实验A = 主线1 + Severity Consistency Loss
+主线2 = 主线1 + PConv
 
 定位:
-loss 辅助消融，不是主结构创新。
+真正的结构模块实验。
+相对主线1，只改 decoder_conv_type: standard -> pconv。
 
 PID:
-28052
+41672
 
 启动时间:
-2026-06-04 22:36
+2026-06-05 08:56
 
 当前检查时间:
-2026-06-04 23:15
+2026-06-05 08:56
 
 当前进度:
-约 epoch60/150 后，仍在运行
-
-最新 mIoU:
-epoch50 mIoU = 69.40
-epoch60 mIoU = 68.30
+epoch1/150 已开始，仍在运行
 
 输出目录:
-D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_severity_150
+D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_pconv_150
 ```
 
 当前判断：
 
 ```text
-附加实验A 暂时低于主线1。
-它可以继续观察，但不要把它当主线。
-如果要马上回到结构创新，应优先跑主线2。
+主线2是当前最重要的结构实验。
+它只验证 PConv decoder 是否能改善小病斑和边界。
+不要在这次训练中混入 CAA、LBFTLoss、Severity Loss 或 SCLP。
 ```
 
 检查命令：
 
 ```powershell
-Get-Process -Id 28052 -ErrorAction SilentlyContinue
-Get-Content -LiteralPath 'D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_severity_150\train_stdout.log' -Tail 80
+Get-Process -Id 41672 -ErrorAction SilentlyContinue
+Get-Content -LiteralPath 'D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_pconv_150\train_stdout.log' -Tail 80
 ```
 
 ## 5. 当前代码能力
@@ -211,11 +211,18 @@ scripts\run_atldsd_deeplabv3plus_mobilenetv3_large_component_aux_severity_150.ps
 附加实验A Linux:
 scripts\run_ubuntu_component_aux_severity_v3.sh
 ./scripts/run_ubuntu.sh component_aux_severity
+
+主线2 Windows:
+scripts\run_atldsd_deeplabv3plus_mobilenetv3_large_component_aux_pconv_150.ps1
+
+主线2 Linux:
+scripts\run_ubuntu_component_aux_pconv_v3.sh
+./scripts/run_ubuntu.sh component_aux_pconv
 ```
 
-## 7. 下一步执行：主线2
+## 7. 当前执行：主线2
 
-下一步应跑：
+当前正在跑：
 
 ```text
 主线2 = 主线1 + PConv
@@ -235,7 +242,7 @@ SCLP
 EfficientNet-B4
 ```
 
-需要新增脚本：
+已新增脚本：
 
 ```text
 Windows:
@@ -268,7 +275,7 @@ D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_pcon
 
 ```text
 第1步:
-跑主线2 = 主线1 + PConv
+等待主线2 = 主线1 + PConv 跑完，并导出 best_miou report。
 
 第2步:
 跑主线3 = 主线1 + CAA

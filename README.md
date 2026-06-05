@@ -122,6 +122,12 @@ Run the component-auxiliary E2 experiment:
 ./scripts/run_ubuntu.sh component_aux
 ```
 
+Run the component-auxiliary + PConv decoder mainline experiment:
+
+```bash
+./scripts/run_ubuntu.sh component_aux_pconv
+```
+
 Run the component-auxiliary + severity-consistency M2 experiment:
 
 ```bash
