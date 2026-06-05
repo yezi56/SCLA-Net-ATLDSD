@@ -168,6 +168,21 @@ ROWS = [
         "fps": 106.89,
         "decision": "best mIoU; promote to current best",
     },
+    {
+        "id": "Boundary2",
+        "method": "Mainline1 + PConv + LBSB",
+        "change": "decoder locality + boundary sharpening",
+        "status": "running",
+        "miou": None,
+        "fg_miou": None,
+        "acc": None,
+        "severity_mae": None,
+        "grade_acc": None,
+        "params_m": None,
+        "flops_g": None,
+        "fps": None,
+        "decision": "running; test PConv-LBSB synergy",
+    },
 ]
 
 
@@ -362,7 +377,7 @@ def plot_model_tradeoff(rows):
             "line": "-",
         },
         {
-            "ids": ["Mainline1", "Mainline2", "Boundary1"],
+            "ids": ["Mainline1", "Mainline2", "Boundary1", "Boundary2"],
             "color": "#1D4E89",
             "label": "Decoder/boundary path",
             "marker": "o",
