@@ -95,6 +95,52 @@ D:\soft\obsidian_notion\seg\ATLDSD项目进度.md
 
 ## 3. 已完成训练结果
 
+统一汇总表和图表已经生成，后续每一次训练完成都必须更新。
+
+```text
+CSV:
+D:\Code\ATLDSD\outputs\atldsd\summary\training_results_summary.csv
+
+Markdown:
+D:\Code\ATLDSD\outputs\atldsd\summary\training_results_summary.md
+
+表格图:
+D:\Code\ATLDSD\outputs\atldsd\summary\fig_training_results_table.png
+
+mIoU 对比图:
+D:\Code\ATLDSD\outputs\atldsd\summary\fig_training_miou_comparison.png
+
+模型效率-精度对比图:
+D:\Code\ATLDSD\outputs\atldsd\summary\fig_training_model_tradeoff.png
+
+生成脚本:
+D:\Code\ATLDSD\figures\gen_fig_training_results_summary.py
+```
+
+更新规则：
+
+```text
+每次训练完成后，必须执行:
+1. 把新实验结果加入 figures\gen_fig_training_results_summary.py 的 ROWS。
+2. 运行:
+   python figures\gen_fig_training_results_summary.py
+3. 更新本笔记中的关键结论。
+4. 同步 Obsidian 笔记。
+5. git add / commit / push。
+```
+
+模型对比图固定样式：
+
+```text
+以后所有模型对比图优先采用 Params(M) 为横轴、mIoU 为纵轴的 accuracy-efficiency trade-off 样式。
+图中用点线连接同一模型族/同一改进链路，例如 Mainline0 -> Mainline1 -> Aux-A 或 Mainline1 -> Mainline2。
+每个点直接标注模型名。
+图内嵌入一个小表，至少包含 mIoU、Params、FLOPs、FPS。
+参考风格类似 SegFormer 论文中的 ADE20K mIoU vs Params 图，而不是只画普通柱状图。
+当前生成文件:
+D:\Code\ATLDSD\outputs\atldsd\summary\fig_training_model_tradeoff.png
+```
+
 | 实验 | 结构 | mIoU | FG mIoU | Acc | Severity MAE | Grade Acc | 结论 |
 |---|---|---:|---:|---:|---:|---:|---|
 | 主线0 | DeepLabV3+ + MobileNetV3-Large | 71.72 | 66.58 | 97.76 | 约0.0124 | 约95.12 | 最强普通 baseline |
@@ -917,4 +963,10 @@ Legacy Comparator: 附加实验C
 5. 每次训练完成，记录 best mIoU、FG mIoU、severity MAE、grade accuracy、Params、FLOPs、FPS。
 6. 每次写笔记，同时更新仓库笔记和 Obsidian 笔记。
 7. 每次代码或仓库笔记变更后，git commit 并 push。
+8. 每次训练完成后，更新训练结果总表和图表:
+   outputs\atldsd\summary\training_results_summary.csv
+   outputs\atldsd\summary\training_results_summary.md
+   outputs\atldsd\summary\fig_training_results_table.png
+   outputs\atldsd\summary\fig_training_miou_comparison.png
+   outputs\atldsd\summary\fig_training_model_tradeoff.png
 ```
