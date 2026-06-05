@@ -75,6 +75,8 @@ def parse_args():
     parser.add_argument("--decoder-conv-type", type=str, default="standard", choices=["standard", "pconv", "repconv"])
     parser.add_argument("--use-ppm", type=str2bool, default=False)
     parser.add_argument("--component-aux", type=str2bool, default=False)
+    parser.add_argument("--lesion-boundary-sharpen", type=str2bool, default=False)
+    parser.add_argument("--lesion-boundary-sharpen-alpha", type=float, default=0.25)
     parser.add_argument("--downsample-factor", type=int, default=16)
     parser.add_argument("--input-shape", nargs=2, type=int, default=[512, 512], metavar=("H", "W"))
     parser.add_argument("--cuda", type=str2bool, default=True)
@@ -365,6 +367,8 @@ def build_predictor(args):
                 "attention_decoder_type": attention_decoder_type,
                 "decoder_conv_type": args.decoder_conv_type,
                 "component_aux": args.component_aux,
+                "lesion_boundary_sharpen": args.lesion_boundary_sharpen,
+                "lesion_boundary_sharpen_alpha": args.lesion_boundary_sharpen_alpha,
             }
         )
     return Predictor(**kwargs)
@@ -405,6 +409,8 @@ def compute_complexity(args, sample_image_path):
             decoder_conv_type=args.decoder_conv_type,
             use_ppm=args.use_ppm,
             use_component_aux=args.component_aux,
+            use_lbsb=args.lesion_boundary_sharpen,
+            lbsb_alpha=args.lesion_boundary_sharpen_alpha,
         ).to(device)
     else:
         model = Model(
@@ -488,6 +494,8 @@ def main():
         "decoder_conv_type": args.decoder_conv_type,
         "use_ppm": args.use_ppm,
         "component_aux": args.component_aux,
+        "lesion_boundary_sharpen": args.lesion_boundary_sharpen,
+        "lesion_boundary_sharpen_alpha": args.lesion_boundary_sharpen_alpha,
         "downsample_factor": args.downsample_factor,
         "input_shape": args.input_shape,
         "cuda": args.cuda,

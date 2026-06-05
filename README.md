@@ -128,6 +128,12 @@ Run the component-auxiliary + PConv decoder mainline experiment:
 ./scripts/run_ubuntu.sh component_aux_pconv
 ```
 
+Run the component-auxiliary + lesion-boundary-sharpening experiment:
+
+```bash
+./scripts/run_ubuntu.sh component_aux_lbsb
+```
+
 Run the component-auxiliary + severity-consistency M2 experiment:
 
 ```bash

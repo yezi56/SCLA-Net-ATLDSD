@@ -111,6 +111,8 @@ def parse_args():
     parser.add_argument("--component-lesion-weight", type=float, default=0.4)
     parser.add_argument("--component-boundary-weight", type=float, default=0.2)
     parser.add_argument("--component-center-weight", type=float, default=0.2)
+    parser.add_argument("--lesion-boundary-sharpen", type=str2bool, default=False, help="Use Lesion Boundary Sharpening Block after decoder fusion.")
+    parser.add_argument("--lesion-boundary-sharpen-alpha", type=float, default=0.25)
     parser.add_argument("--severity-consistency-loss", type=str2bool, default=False, help="Constrain predicted lesion/leaf ratio to match ground truth severity.")
     parser.add_argument("--severity-consistency-weight", type=float, default=0.1)
     parser.add_argument("--severity-loss-type", type=str, default="l1", choices=["l1", "smooth_l1", "mse"])
@@ -225,6 +227,10 @@ def auto_export_report(args, dataset_path):
         str(args.use_ppm).lower(),
         "--component-aux",
         str(args.component_aux).lower(),
+        "--lesion-boundary-sharpen",
+        str(args.lesion_boundary_sharpen).lower(),
+        "--lesion-boundary-sharpen-alpha",
+        str(args.lesion_boundary_sharpen_alpha),
         "--downsample-factor",
         str(args.downsample_factor),
         "--decoder-conv-type",
@@ -306,6 +312,8 @@ if __name__ == "__main__":
         use_ppm=args.use_ppm,
         ppm_bins=args.ppm_bins,
         use_component_aux=args.component_aux,
+        use_lbsb=args.lesion_boundary_sharpen,
+        lbsb_alpha=args.lesion_boundary_sharpen_alpha,
     )
     if not args.pretrained:
         weights_init(model)
@@ -418,6 +426,8 @@ if __name__ == "__main__":
             component_lesion_weight=args.component_lesion_weight,
             component_boundary_weight=args.component_boundary_weight,
             component_center_weight=args.component_center_weight,
+            lesion_boundary_sharpen=args.lesion_boundary_sharpen,
+            lesion_boundary_sharpen_alpha=args.lesion_boundary_sharpen_alpha,
             severity_consistency_loss=args.severity_consistency_loss,
             severity_consistency_weight=args.severity_consistency_weight,
             severity_loss_type=args.severity_loss_type,

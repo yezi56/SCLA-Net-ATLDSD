@@ -245,6 +245,29 @@ class DecoderConvBlock(nn.Module):
         return self.block(x)
 
 
+class LesionBoundarySharpeningBlock(nn.Module):
+    def __init__(self, channels, alpha=0.25):
+        super().__init__()
+        self.alpha = alpha
+        self.boundary_gate = nn.Sequential(
+            nn.Conv2d(1, channels, 1, bias=True),
+            nn.Sigmoid(),
+        )
+        self.smooth = nn.AvgPool2d(kernel_size=3, stride=1, padding=1)
+
+    def forward(self, feature, boundary_logits):
+        if boundary_logits.shape[-2:] != feature.shape[-2:]:
+            boundary_logits = F.interpolate(
+                boundary_logits,
+                size=feature.shape[-2:],
+                mode="bilinear",
+                align_corners=True,
+            )
+        edge = feature - self.smooth(feature)
+        gate = self.boundary_gate(boundary_logits)
+        return feature + self.alpha * edge * gate
+
+
 class DeepLab(nn.Module):
     def __init__(
         self,
@@ -261,9 +284,12 @@ class DeepLab(nn.Module):
         use_ppm=False,
         ppm_bins=(1, 2, 3, 6),
         use_component_aux=False,
+        use_lbsb=False,
+        lbsb_alpha=0.25,
     ):
         super().__init__()
         self.use_component_aux = use_component_aux
+        self.use_lbsb = use_lbsb
 
         self.backbone, in_channels, low_level_channels = build_backbone(
             backbone,
@@ -296,11 +322,14 @@ class DeepLab(nn.Module):
             nn.Dropout(0.1),
         )
         self.attention_decoder = build_attention(attention_decoder_type, 256)
+        self.lbsb = LesionBoundarySharpeningBlock(256, alpha=lbsb_alpha) if use_lbsb else nn.Identity()
         self.cls_conv = nn.Conv2d(256, num_classes, 1, stride=1)
         if self.use_component_aux:
             self.lesion_aux_head = nn.Conv2d(256, 1, 1, stride=1)
             self.boundary_aux_head = nn.Conv2d(256, 1, 1, stride=1)
             self.center_aux_head = nn.Conv2d(256, 1, 1, stride=1)
+        elif self.use_lbsb:
+            raise ValueError("LBSB requires use_component_aux=True so boundary logits are available.")
 
     def forward(self, x):
         height, width = x.size(2), x.size(3)
@@ -315,6 +344,9 @@ class DeepLab(nn.Module):
         x = F.interpolate(x, size=(low_level_features.size(2), low_level_features.size(3)), mode="bilinear", align_corners=True)
         x = self.cat_conv(torch.cat((x, low_level_features), dim=1))
         x = self.attention_decoder(x)
+        if self.use_lbsb:
+            boundary_feature_logits = self.boundary_aux_head(x)
+            x = self.lbsb(x, boundary_feature_logits)
         logits = self.cls_conv(x)
         logits = F.interpolate(logits, size=(height, width), mode="bilinear", align_corners=True)
         if not self.use_component_aux:
