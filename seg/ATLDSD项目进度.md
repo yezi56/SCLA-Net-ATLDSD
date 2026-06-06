@@ -36,25 +36,31 @@ PConv 与 LBSB 没有形成互补。
 当前最强仍然是:
 主线1 + LBSB
 
-当前正在跑:
-融合1 = 主线1 + LBSB + LCAF
+最新完成:
+融合1 = 主线1 + LBSB + LCAF 已完成 150 epoch。
 
-PID:
-12940
+结果:
+mIoU = 72.68
+FG mIoU = 67.70
+Accuracy = 97.86
+Severity MAE = 0.01169
+Grade Acc = 93.90
+Params = 11.76M
+FLOPs = 15.53G
+FPS = 88.16
 
-启动时间:
-2026-06-05 22:10
+结论:
+LCAF 没有超过边界1的 mIoU 72.86。
+rust IoU 略高于边界1，但 gray_spot / brown_spot 未超过边界1。
+LCAF 可以作为候选消融结果保留，但当前不替代 LBSB-only。
+当前最强仍然是:
+主线1 + LBSB
+
+完成时间:
+2026-06-05 23:46
 
 输出目录:
 D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_lbsb_lcaf_150
-
-目的:
-验证 lesion-aware cross-scale fusion 是否能在 LBSB 的边界锐化基础上，进一步改善高层病斑语义和低层边缘细节的融合。
-
-判断:
-如果融合1超过边界1的 mIoU 72.86，LCAF 进入最终结构候选。
-如果融合1不超过边界1，但 gray_spot / brown_spot / alternaria_leaf_spot IoU 明显提升，可以作为小病斑增强模块保留候选。
-如果 mIoU 和小病斑类都下降，LCAF 不进入最终模型。
 
 完成时间:
 2026-06-05 19:00
@@ -256,7 +262,7 @@ D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_lbsb
 | 主线2 | 主线1 + PConv | 71.76 | 66.62 | 97.80 | 0.01373 | 93.09 | 更轻但精度下降，需测试 PConv+LBSB 互补 |
 | 边界1 | 主线1 + LBSB | 72.86 | 67.89 | 97.97 | 0.01177 | 93.90 | 当前最高 mIoU，LBSB 单独有效 |
 | 边界2 | 主线1 + PConv + LBSB | 71.68 | 66.54 | 97.72 | 0.01281 | 93.50 | 未超过边界1，PConv 不保留 |
-| 融合1 | 主线1 + LBSB + LCAF | 运行中 | 运行中 | 运行中 | 运行中 | 运行中 | 验证跨尺度融合能否增强小病斑 |
+| 融合1 | 主线1 + LBSB + LCAF | 72.68 | 67.70 | 97.86 | 0.01169 | 93.90 | 接近但未超过边界1，不替代 LBSB-only |
 | B4 baseline | DeepLabV3+ + EfficientNet-B4 | 65.59 | 59.59 | 96.44 | 未主用 | 未主用 | 更重更差，弃作主干 |
 | SCLP 0.7 | 主线0 + 强 copy-paste | 68.97 | 未主用 | 未主用 | 未主用 | 未主用 | 失败增强 |
 | SCLP 0.3 | 主线0 + 弱 copy-paste | 69.90 | 未主用 | 未主用 | 未主用 | 未主用 | 仍低于主线0 |

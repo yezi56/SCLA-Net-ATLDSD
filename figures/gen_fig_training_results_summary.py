@@ -187,16 +187,16 @@ ROWS = [
         "id": "Fusion1",
         "method": "Mainline1 + LBSB + LCAF",
         "change": "lesion-aware cross-scale fusion",
-        "status": "running",
-        "miou": None,
-        "fg_miou": None,
-        "acc": None,
-        "severity_mae": None,
-        "grade_acc": None,
-        "params_m": None,
-        "flops_g": None,
-        "fps": None,
-        "decision": "running; test cross-scale fusion after LBSB",
+        "status": "done",
+        "miou": 72.68,
+        "fg_miou": 67.70,
+        "acc": 97.86,
+        "severity_mae": 0.01169,
+        "grade_acc": 93.90,
+        "params_m": 11.76,
+        "flops_g": 15.53,
+        "fps": 88.16,
+        "decision": "close, but below Boundary1; do not replace LBSB-only",
     },
 ]
 
@@ -424,6 +424,7 @@ def plot_model_tradeoff(rows):
         "Aux-A": (0.24, 0.34),
         "Mainline2": (-1.65, -0.28),
         "Boundary1": (0.28, 0.16),
+        "Fusion1": (0.28, -0.28),
     }
     for r in rows_with_cost:
         dx, dy = offsets.get(r["id"], (0.2, 0.2))

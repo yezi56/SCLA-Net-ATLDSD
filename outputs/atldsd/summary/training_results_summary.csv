@@ -10,4 +10,4 @@ Aux-A,Mainline1 + severity loss,loss ablation,done,72.12,67.06,97.78,0.01147,93.
 Mainline2,Mainline1 + PConv,decoder locality,done,71.76,66.62,97.8,0.01373,93.09,10.65,6.51,92.14,lighter; test PConv+LBSB synergy
 Boundary1,Mainline1 + LBSB,boundary sharpening,done,72.86,67.89,97.97,0.01177,93.9,11.73,15.29,106.89,best mIoU; promote to current best
 Boundary2,Mainline1 + PConv + LBSB,decoder locality + boundary sharpening,done,71.68,66.54,97.72,0.01281,93.5,10.65,6.52,39.81,no PConv-LBSB synergy; do not keep PConv
-Fusion1,Mainline1 + LBSB + LCAF,lesion-aware cross-scale fusion,running,,,,,,,,,running; test cross-scale fusion after LBSB
+Fusion1,Mainline1 + LBSB + LCAF,lesion-aware cross-scale fusion,done,72.68,67.7,97.86,0.01169,93.9,11.76,15.53,88.16,"close, but below Boundary1; do not replace LBSB-only"
