@@ -1087,3 +1087,150 @@ Legacy Comparator: 附加实验C
    outputs\atldsd\summary\fig_training_miou_comparison.png
    outputs\atldsd\summary\fig_training_model_tradeoff.png
 ```
+# 2026-06-06 训练计划修正版
+
+本节是当前最新训练计划，优先级高于后面旧的“后续顺序”和旧顶会借鉴段落。
+
+```text
+当前实验事实:
+1. 主线1 + LBSB = 72.86 mIoU，当前最强。
+2. 主线1 + PConv + LBSB = 71.68 mIoU，PConv 不保留。
+3. 主线1 + LBSB + LCAF = 72.68 mIoU，接近但低于 LBSB-only，LCAF 不作为当前主模块。
+
+因此:
+不要继续堆 PConv。
+不要继续围绕 LCAF 调参。
+不要再把普通 CAA 写成主创新。
+下一步必须围绕“为什么 LBSB 有效、如何进一步服务小病斑和严重度”来训练。
+```
+
+## 新借鉴点
+
+这次换掉旧的“泛注意力/融合模块”借鉴，改成更贴合当前结果的 3 个方向。
+
+| 新优先级 | 借鉴来源 | 论文/方向要点 | 本项目可落地点 | 为什么现在适合 |
+|---|---|---|---|---|
+| 1 | CVPR 2025 SegMAN | 语义分割需要 global context、local detail、multi-scale 同时存在 | `LGLC`: ASPP 后加入轻量 local-global context block | LCAF 已经证明 concat 前交叉融合不够，下一步改在 ASPP 后补上下文 |
+| 2 | Measurement 2025 ALDNet | 苹果叶病斑分割中，小病斑、模糊边界、复杂环境是主要难点；RA/浅层边界细化有效 | `CFR`: component-feedback refinement，用 lesion/boundary/center 概率反向细化 decoder feature | 我们已有三辅助头，应该利用它们反馈主分割，而不是只当 loss |
+| 3 | 2025 AFR/高频细化类语义分割思路 | 用低分辨率语义先验 + 高频细节/不确定性来改善边界 | `UHF`: uncertainty-guided high-frequency refinement，只在预测不确定区域增强高频 | ATLDSD 错误集中在小病斑边界，适合做局部增强而不是全图加模块 |
+| 4 | 2025 plant disease severity / PDSNets 类工作 | 严重度估计不只看 mIoU，还要看速度、Params、FLOPs、severity MAE | 最终模型后补 `severity calibration loss` 一轮 | 这是论文应用价值，不作为主结构创新 |
+
+参考来源：
+
+```text
+SegMAN, CVPR 2025:
+https://openaccess.thecvf.com/content/CVPR2025/html/Fu_SegMAN_Omni-scale_Context_Modeling_with_State_Space_Models_and_Local_CVPR_2025_paper.html
+
+ALDNet, Measurement 2025:
+https://doi.org/10.1016/j.measurement.2025.117706
+
+AFRDA, arXiv 2025:
+https://arxiv.org/abs/2507.17957
+```
+
+## 新训练顺序
+
+```text
+第1步: Context1
+结构:
+  主线1 + LBSB + LGLC
+
+模块位置:
+  ASPP 后，decoder concat 前。
+
+目的:
+  借鉴 SegMAN 的 local-global-multi-scale 思路，但不换 backbone，不引入大 Transformer。
+  验证“全局叶片上下文 + 局部病斑细节”是否能继续提升 Boundary1。
+
+判断:
+  如果 mIoU > 72.86:
+    LGLC 进入最终候选。
+  如果 mIoU 接近 72.86，但 alternaria / gray_spot / brown_spot 任意两类提升:
+    LGLC 作为小病斑候选。
+  否则:
+    LGLC 不保留。
+```
+
+```text
+第2步: Refine1
+结构:
+  主线1 + LBSB + CFR
+
+模块位置:
+  LBSB 后、cls_conv 前。
+
+实现思想:
+  用 lesion_aux_head / boundary_aux_head / center_aux_head 的概率图生成 feedback gate。
+  gate 只调制 decoder feature，不改变标签、不做两阶段推理。
+
+目的:
+  借鉴 ALDNet 的 reverse-attention / shallow refinement 逻辑。
+  但本项目保持单阶段推理，用 component feedback 解释为“病斑组件反馈细化”。
+
+判断:
+  如果 mIoU > 72.86:
+    CFR 进入最终候选。
+  如果 severity MAE < 0.01169 且 mIoU 不低于 72.6:
+    CFR 可作为严重度友好模块。
+  否则:
+    CFR 不保留。
+```
+
+```text
+第3步: UHF
+结构:
+  当前最强候选 + UHF
+
+模块位置:
+  decoder feature 上，利用 softmax entropy 或 lesion probability 找到不确定区域。
+
+目的:
+  只在边界/不确定区域增强高频，不全图加复杂 attention。
+
+判断:
+  只有 Context1 / Refine1 仍无法超过 Boundary1，才做 UHF。
+  UHF 是后备，不抢论文主线。
+```
+
+```text
+第4步: Severity-Calib
+结构:
+  最终结构 + severity consistency loss
+
+目的:
+  不再追 mIoU，而是专门看 severity MAE / grade accuracy 是否改善。
+
+定位:
+  只作为应用指标增强，不写成主创新。
+```
+
+## 当前论文主线改写
+
+```text
+旧主线:
+Component heads + LBSB + LCAF / attention
+
+新主线:
+Component heads + LBSB 是核心。
+后续只允许围绕两个问题补模块:
+1. 小病斑是否需要更好的上下文？ -> LGLC
+2. 已有组件头能否反馈主分割？ -> CFR
+
+最终论文不要写成“加了很多模块”。
+应写成:
+结构化组件监督 + 边界锐化 + 可解释组件反馈/上下文补偿。
+```
+
+## 立即下一步
+
+```text
+下一步优先做:
+Context1 = 主线1 + LBSB + LGLC
+
+暂不做:
+PConv
+LCAF 调参
+普通 CAA
+LBFTLoss
+SCLP
+```
