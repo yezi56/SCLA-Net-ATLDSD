@@ -14,4 +14,4 @@
 | Boundary1 | Mainline1 + LBSB | boundary sharpening | done | 72.86 | 67.89 | 0.01177 | 93.90 | 11.73 | 15.29 | best mIoU; promote to current best |
 | Boundary2 | Mainline1 + PConv + LBSB | decoder locality + boundary sharpening | done | 71.68 | 66.54 | 0.01281 | 93.50 | 10.65 | 6.52 | no PConv-LBSB synergy; do not keep PConv |
 | Fusion1 | Mainline1 + LBSB + LCAF | lesion-aware cross-scale fusion | done | 72.68 | 67.70 | 0.01169 | 93.90 | 11.76 | 15.53 | close, but below Boundary1; do not replace LBSB-only |
-| Context1 | Mainline1 + LBSB + LGLC | local-global lesion context | running | - | - | - | - | - | - | running; test ASPP-side local-global context |
+| Context1 | Mainline1 + LBSB + LGLC | local-global lesion context | done | 72.31 | 67.26 | 0.01170 | 93.50 | 11.84 | 15.33 | below Boundary1; keep as negative context ablation |

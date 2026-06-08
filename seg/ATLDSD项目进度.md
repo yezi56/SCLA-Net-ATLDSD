@@ -77,6 +77,48 @@ D:\Code\ATLDSD\scripts\run_ubuntu_component_aux_pconv_lbsb_v3.sh
 ./scripts/run_ubuntu.sh boundary2
 ```
 
+# 2026-06-08 Context1 完成记录
+
+```text
+实验:
+Context1 = 主线1 + LBSB + LGLC
+
+训练状态:
+150 / 150 已完成
+
+最终 best_miou 验证集指标:
+mIoU: 72.31
+FG mIoU: 67.26
+Accuracy: 97.87
+Severity MAE: 0.01170
+Severity Grade Acc: 93.50
+Params: 11.84M
+FLOPs: 15.33G
+FPS: 42.85
+
+关键类别 IoU:
+leaf: 93.77
+rust: 81.39
+alternaria_leaf_spot: 53.45
+gray_spot: 57.50
+brown_spot: 50.20
+
+和当前最强 Boundary1 对比:
+Boundary1 mIoU: 72.86
+Context1 mIoU: 72.31
+差值: -0.55
+
+结论:
+LGLC 没有超过 Boundary1。
+它说明单纯在 ASPP 后补 local-global context 不能稳定解决 ATLDSD 的小病斑问题。
+后续不继续围绕 LGLC 调参。
+
+下一步:
+进入 Refine1 = 主线1 + LBSB + CFR。
+CFR 的目标不是再堆上下文，而是让 component auxiliary heads 反向反馈主分割，
+重点解决 alternaria_leaf_spot / gray_spot / brown_spot 这些小病斑类别。
+```
+
 ```text
 当前最强普通 baseline:
 主线0 = DeepLabV3+ + MobileNetV3-Large

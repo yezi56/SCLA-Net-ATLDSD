@@ -202,16 +202,16 @@ ROWS = [
         "id": "Context1",
         "method": "Mainline1 + LBSB + LGLC",
         "change": "local-global lesion context",
-        "status": "running",
-        "miou": None,
-        "fg_miou": None,
-        "acc": None,
-        "severity_mae": None,
-        "grade_acc": None,
-        "params_m": None,
-        "flops_g": None,
-        "fps": None,
-        "decision": "running; test ASPP-side local-global context",
+        "status": "done",
+        "miou": 72.31,
+        "fg_miou": 67.26,
+        "acc": 97.87,
+        "severity_mae": 0.01170,
+        "grade_acc": 93.50,
+        "params_m": 11.84,
+        "flops_g": 15.33,
+        "fps": 42.85,
+        "decision": "below Boundary1; keep as negative context ablation",
     },
 ]
 
@@ -407,7 +407,7 @@ def plot_model_tradeoff(rows):
             "line": "-",
         },
         {
-            "ids": ["Mainline1", "Mainline2", "Boundary1", "Boundary2", "Fusion1"],
+            "ids": ["Mainline1", "Mainline2", "Boundary1", "Boundary2", "Fusion1", "Context1"],
             "color": "#1D4E89",
             "label": "Decoder/boundary path",
             "marker": "o",
@@ -440,10 +440,11 @@ def plot_model_tradeoff(rows):
         "Mainline2": (-1.65, -0.28),
         "Boundary1": (0.28, 0.16),
         "Fusion1": (0.28, -0.28),
+        "Context1": (0.30, -0.20),
     }
     for r in rows_with_cost:
         dx, dy = offsets.get(r["id"], (0.2, 0.2))
-        weight = "bold" if r["id"] in {"Mainline1", "Aux-A"} else "normal"
+        weight = "bold" if r["id"] in {"Boundary1", "Aux-A"} else "normal"
         ax.scatter(r["params_m"], r["miou"], s=32, color="#111827", zorder=4)
         ax.text(r["params_m"] + dx, r["miou"] + dy, r["id"], fontsize=8.5, weight=weight)
 
@@ -451,7 +452,7 @@ def plot_model_tradeoff(rows):
     ax.set_ylabel("ATLDSD mIoU (%)")
     ax.set_title("ATLDSD Model Accuracy-Efficiency Comparison", weight="bold")
     ax.set_xlim(8.2, 34.5)
-    ax.set_ylim(65.0, 72.8)
+    ax.set_ylim(65.0, 73.2)
     ax.grid(alpha=0.2)
     ax.legend(loc="upper left", frameon=False, fontsize=8.5)
 
