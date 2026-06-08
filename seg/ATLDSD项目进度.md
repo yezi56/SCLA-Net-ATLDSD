@@ -77,6 +77,54 @@ D:\Code\ATLDSD\scripts\run_ubuntu_component_aux_pconv_lbsb_v3.sh
 ./scripts/run_ubuntu.sh boundary2
 ```
 
+# 2026-06-08 超越 Boundary1 新计划
+
+```text
+背景:
+我们为了超过 Boundary1 做了很多尝试，但目前都没有超过。
+
+当前最强:
+Boundary1 = Mainline1 + LBSB
+mIoU: 72.86
+FG mIoU: 67.89
+
+失败尝试:
+B4 backbone -> 65.59
+SCLP -> 68.97 / 69.90
+PConv -> 71.76
+PConv + LBSB -> 71.68
+LCAF -> 72.68
+LGLC -> 72.31
+Severity loss -> 72.12
+
+新的核心判断:
+继续加普通模块不是好路。
+ATLDSD 的主要短板是小病斑，尤其 alternaria_leaf_spot / gray_spot / brown_spot。
+之前所有主实验都是 256x256，病斑可能在输入阶段就被压小。
+
+新的执行优先级:
+1. Boundary1-384
+   先不改结构，只把输入从 256x256 提到 384x384。
+   这是最有希望直接超过 Boundary1 的下一步。
+
+2. Boundary1-repeat
+   跑 seed 42 / 2026。
+   这是严谨性实验，不是超越实验，用于确认 Boundary1 是否稳定。
+
+3. CFR-256
+   如果 384 没有解决，再做 component feedback refinement。
+   让 lesion / boundary / center 辅助头反馈主分割特征。
+
+4. CFR-384
+   只有 Boundary1-384 或 CFR-256 接近成功时才做。
+
+停止方向:
+不再继续 PConv、LCAF、LGLC、SCLP、B4、普通 CAA。
+
+完整计划文件:
+D:\Code\ATLDSD\seg\ATLDSD超越Boundary1训练计划_2026-06-08.md
+```
+
 # 2026-06-08 Context1 完成记录
 
 ```text
