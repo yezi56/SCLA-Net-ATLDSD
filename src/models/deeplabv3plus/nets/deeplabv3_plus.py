@@ -113,6 +113,45 @@ class PyramidPoolingModule(nn.Module):
         return self.project(torch.cat(pyramids, dim=1))
 
 
+class LocalGlobalLesionContextBlock(nn.Module):
+    def __init__(self, channels=256, reduction=4, alpha=0.5, bn_mom=0.1):
+        super().__init__()
+        self.alpha = alpha
+        hidden = max(channels // reduction, 32)
+        self.local_context = nn.Sequential(
+            nn.Conv2d(channels, channels, 3, padding=1, groups=channels, bias=False),
+            nn.BatchNorm2d(channels, momentum=bn_mom),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels, channels, 5, padding=2, groups=channels, bias=False),
+            nn.BatchNorm2d(channels, momentum=bn_mom),
+            nn.ReLU(inplace=True),
+        )
+        self.global_context = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, hidden, 1, bias=False),
+            nn.BatchNorm2d(hidden, momentum=bn_mom),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden, channels, 1, bias=False),
+            nn.Sigmoid(),
+        )
+        self.spatial_gate = nn.Sequential(
+            nn.Conv2d(channels, 1, 1, bias=True),
+            nn.Sigmoid(),
+        )
+        self.project = nn.Sequential(
+            nn.Conv2d(channels, channels, 1, bias=False),
+            nn.BatchNorm2d(channels, momentum=bn_mom),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, x):
+        local = self.local_context(x)
+        global_gate = self.global_context(x)
+        spatial_gate = self.spatial_gate(local)
+        context = self.project(local * global_gate * (1.0 + spatial_gate))
+        return x + self.alpha * context
+
+
 class PartialConv3(nn.Module):
     def __init__(self, channels, n_div=4):
         super().__init__()
@@ -324,11 +363,14 @@ class DeepLab(nn.Module):
         lbsb_alpha=0.25,
         use_lcaf=False,
         lcaf_alpha=0.5,
+        use_lglc=False,
+        lglc_alpha=0.5,
     ):
         super().__init__()
         self.use_component_aux = use_component_aux
         self.use_lbsb = use_lbsb
         self.use_lcaf = use_lcaf
+        self.use_lglc = use_lglc
 
         self.backbone, in_channels, low_level_channels = build_backbone(
             backbone,
@@ -345,6 +387,7 @@ class DeepLab(nn.Module):
         self.attention_high = build_attention(attention_high_type, in_channels)
         self.aspp = ASPP(dim_in=in_channels, dim_out=256, rate=16 // downsample_factor)
         self.attention_aspp = build_attention(attention_aspp_type, 256)
+        self.lglc = LocalGlobalLesionContextBlock(256, alpha=lglc_alpha) if use_lglc else nn.Identity()
         self.use_ppm = use_ppm
         self.ppm = PyramidPoolingModule(256, out_channels=256, pool_sizes=tuple(ppm_bins)) if use_ppm else nn.Identity()
 
@@ -378,6 +421,7 @@ class DeepLab(nn.Module):
         x = self.attention_high(x)
         x = self.aspp(x)
         x = self.attention_aspp(x)
+        x = self.lglc(x)
         x = self.ppm(x)
         low_level_features = self.shortcut_conv(low_level_features)
 

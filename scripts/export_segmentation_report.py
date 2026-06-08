@@ -79,6 +79,8 @@ def parse_args():
     parser.add_argument("--lesion-boundary-sharpen-alpha", type=float, default=0.25)
     parser.add_argument("--lesion-cross-scale-fusion", type=str2bool, default=False)
     parser.add_argument("--lesion-cross-scale-fusion-alpha", type=float, default=0.5)
+    parser.add_argument("--lesion-local-global-context", type=str2bool, default=False)
+    parser.add_argument("--lesion-local-global-context-alpha", type=float, default=0.5)
     parser.add_argument("--downsample-factor", type=int, default=16)
     parser.add_argument("--input-shape", nargs=2, type=int, default=[512, 512], metavar=("H", "W"))
     parser.add_argument("--cuda", type=str2bool, default=True)
@@ -373,6 +375,8 @@ def build_predictor(args):
                 "lesion_boundary_sharpen_alpha": args.lesion_boundary_sharpen_alpha,
                 "lesion_cross_scale_fusion": args.lesion_cross_scale_fusion,
                 "lesion_cross_scale_fusion_alpha": args.lesion_cross_scale_fusion_alpha,
+                "lesion_local_global_context": args.lesion_local_global_context,
+                "lesion_local_global_context_alpha": args.lesion_local_global_context_alpha,
             }
         )
     return Predictor(**kwargs)
@@ -417,6 +421,8 @@ def compute_complexity(args, sample_image_path):
             lbsb_alpha=args.lesion_boundary_sharpen_alpha,
             use_lcaf=args.lesion_cross_scale_fusion,
             lcaf_alpha=args.lesion_cross_scale_fusion_alpha,
+            use_lglc=args.lesion_local_global_context,
+            lglc_alpha=args.lesion_local_global_context_alpha,
         ).to(device)
     else:
         model = Model(
@@ -504,6 +510,8 @@ def main():
         "lesion_boundary_sharpen_alpha": args.lesion_boundary_sharpen_alpha,
         "lesion_cross_scale_fusion": args.lesion_cross_scale_fusion,
         "lesion_cross_scale_fusion_alpha": args.lesion_cross_scale_fusion_alpha,
+        "lesion_local_global_context": args.lesion_local_global_context,
+        "lesion_local_global_context_alpha": args.lesion_local_global_context_alpha,
         "downsample_factor": args.downsample_factor,
         "input_shape": args.input_shape,
         "cuda": args.cuda,

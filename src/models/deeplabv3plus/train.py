@@ -115,6 +115,8 @@ def parse_args():
     parser.add_argument("--lesion-boundary-sharpen-alpha", type=float, default=0.25)
     parser.add_argument("--lesion-cross-scale-fusion", type=str2bool, default=False, help="Use Lesion-aware Cross-scale Attention Fusion before decoder concat.")
     parser.add_argument("--lesion-cross-scale-fusion-alpha", type=float, default=0.5)
+    parser.add_argument("--lesion-local-global-context", type=str2bool, default=False, help="Use Local-Global Lesion Context Block after ASPP.")
+    parser.add_argument("--lesion-local-global-context-alpha", type=float, default=0.5)
     parser.add_argument("--severity-consistency-loss", type=str2bool, default=False, help="Constrain predicted lesion/leaf ratio to match ground truth severity.")
     parser.add_argument("--severity-consistency-weight", type=float, default=0.1)
     parser.add_argument("--severity-loss-type", type=str, default="l1", choices=["l1", "smooth_l1", "mse"])
@@ -237,6 +239,10 @@ def auto_export_report(args, dataset_path):
         str(args.lesion_cross_scale_fusion).lower(),
         "--lesion-cross-scale-fusion-alpha",
         str(args.lesion_cross_scale_fusion_alpha),
+        "--lesion-local-global-context",
+        str(args.lesion_local_global_context).lower(),
+        "--lesion-local-global-context-alpha",
+        str(args.lesion_local_global_context_alpha),
         "--downsample-factor",
         str(args.downsample_factor),
         "--decoder-conv-type",
@@ -322,6 +328,8 @@ if __name__ == "__main__":
         lbsb_alpha=args.lesion_boundary_sharpen_alpha,
         use_lcaf=args.lesion_cross_scale_fusion,
         lcaf_alpha=args.lesion_cross_scale_fusion_alpha,
+        use_lglc=args.lesion_local_global_context,
+        lglc_alpha=args.lesion_local_global_context_alpha,
     )
     if not args.pretrained:
         weights_init(model)
@@ -438,6 +446,8 @@ if __name__ == "__main__":
             lesion_boundary_sharpen_alpha=args.lesion_boundary_sharpen_alpha,
             lesion_cross_scale_fusion=args.lesion_cross_scale_fusion,
             lesion_cross_scale_fusion_alpha=args.lesion_cross_scale_fusion_alpha,
+            lesion_local_global_context=args.lesion_local_global_context,
+            lesion_local_global_context_alpha=args.lesion_local_global_context_alpha,
             severity_consistency_loss=args.severity_consistency_loss,
             severity_consistency_weight=args.severity_consistency_weight,
             severity_loss_type=args.severity_loss_type,

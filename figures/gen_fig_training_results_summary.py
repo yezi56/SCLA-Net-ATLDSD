@@ -198,6 +198,21 @@ ROWS = [
         "fps": 88.16,
         "decision": "close, but below Boundary1; do not replace LBSB-only",
     },
+    {
+        "id": "Context1",
+        "method": "Mainline1 + LBSB + LGLC",
+        "change": "local-global lesion context",
+        "status": "running",
+        "miou": None,
+        "fg_miou": None,
+        "acc": None,
+        "severity_mae": None,
+        "grade_acc": None,
+        "params_m": None,
+        "flops_g": None,
+        "fps": None,
+        "decision": "running; test ASPP-side local-global context",
+    },
 ]
 
 

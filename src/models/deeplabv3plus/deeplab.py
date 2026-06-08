@@ -50,6 +50,8 @@ class DeeplabV3(object):
         "lesion_boundary_sharpen_alpha": 0.25,
         "lesion_cross_scale_fusion": "auto",
         "lesion_cross_scale_fusion_alpha": 0.5,
+        "lesion_local_global_context": "auto",
+        "lesion_local_global_context_alpha": 0.5,
         #----------------------------------------#
         #   输入图片的大小
         #----------------------------------------#
@@ -162,6 +164,13 @@ class DeeplabV3(object):
             return self.lesion_cross_scale_fusion.lower() in {"true", "1", "yes", "y"}
         return any(key.startswith("lcaf.") for key in checkpoint.keys())
 
+    def _resolve_use_lglc(self, checkpoint):
+        if isinstance(self.lesion_local_global_context, bool):
+            return self.lesion_local_global_context
+        if isinstance(self.lesion_local_global_context, str) and self.lesion_local_global_context.lower() != "auto":
+            return self.lesion_local_global_context.lower() in {"true", "1", "yes", "y"}
+        return any(key.startswith("lglc.") for key in checkpoint.keys())
+
     @staticmethod
     def _main_output(output):
         if isinstance(output, dict):
@@ -219,6 +228,7 @@ class DeeplabV3(object):
         use_component_aux = self._resolve_use_component_aux(checkpoint)
         use_lbsb = self._resolve_use_lbsb(checkpoint)
         use_lcaf = self._resolve_use_lcaf(checkpoint)
+        use_lglc = self._resolve_use_lglc(checkpoint)
         self.net = DeepLab(
             num_classes=self.num_classes,
             backbone=backbone,
@@ -236,13 +246,15 @@ class DeeplabV3(object):
             lbsb_alpha=float(self.lesion_boundary_sharpen_alpha),
             use_lcaf=use_lcaf,
             lcaf_alpha=float(self.lesion_cross_scale_fusion_alpha),
+            use_lglc=use_lglc,
+            lglc_alpha=float(self.lesion_local_global_context_alpha),
         )
 
         device      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.net.load_state_dict(checkpoint)
         self.net    = self.net.eval()
         print(
-            '{} model, backbone={}, attention=global:{}, low:{}, high:{}, aspp:{}, decoder:{}, decoder_conv={}, use_ppm={}, lbsb={}, lcaf={}, and classes loaded.'.format(
+            '{} model, backbone={}, attention=global:{}, low:{}, high:{}, aspp:{}, decoder:{}, decoder_conv={}, use_ppm={}, lbsb={}, lcaf={}, lglc={}, and classes loaded.'.format(
                 self.model_path,
                 backbone,
                 attention_type or 'none',
@@ -254,6 +266,7 @@ class DeeplabV3(object):
                 use_ppm,
                 use_lbsb,
                 use_lcaf,
+                use_lglc,
             )
         )
         if not onnx:

@@ -1234,3 +1234,43 @@ LCAF 调参
 LBFTLoss
 SCLP
 ```
+
+# 2026-06-08 Context1 启动记录
+
+```text
+当前正在跑:
+Context1 = 主线1 + LBSB + LGLC
+
+PID:
+80716
+
+启动时间:
+2026-06-08 09:18
+
+输出目录:
+D:\Code\ATLDSD\outputs\atldsd\deeplabv3plus_mobilenetv3_large_component_aux_lbsb_lglc_150
+
+Windows 脚本:
+D:\Code\ATLDSD\scripts\run_atldsd_deeplabv3plus_mobilenetv3_large_component_aux_lbsb_lglc_150.ps1
+
+Linux 脚本:
+D:\Code\ATLDSD\scripts\run_ubuntu_component_aux_lbsb_lglc_v3.sh
+或:
+./scripts/run_ubuntu.sh context1
+
+本次只验证:
+主线1 + LBSB + LGLC
+
+不混入:
+PConv
+LCAF
+普通 CAA
+LBFTLoss
+SCLP
+severity consistency loss
+
+判断:
+如果 mIoU > 72.86，LGLC 进入最终候选。
+如果 mIoU 接近 72.86，但 alternaria / gray_spot / brown_spot 任意两类提升，LGLC 可作为小病斑候选。
+否则 LGLC 不保留。
+```
