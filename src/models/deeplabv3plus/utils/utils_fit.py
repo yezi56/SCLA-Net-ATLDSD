@@ -14,7 +14,7 @@ from utils.utils_metrics import f_score
 def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Epoch, cuda, dice_loss, focal_loss, cls_weights, num_classes, \
     fp16, scaler, save_period, save_dir, local_rank=0, focal_alpha=0.5, focal_gamma=2.0, mix_mode="none", mix_prob=0.0, mixup_alpha=0.4, cutmix_alpha=1.0, \
     lbft_loss=False, lbft_lambda=1.0, lbft_alpha=0.3, lbft_beta=0.7, lbft_gamma=1.33, component_aux=False, component_lesion_weight=0.4, component_boundary_weight=0.2, component_center_weight=0.2, \
-    severity_consistency_loss=False, severity_consistency_weight=0.1, severity_loss_type="l1", label_smoothing=0.0, dice_class_start=0, lesion_prior_loss=False, lesion_prior_weight=0.05, lesion_prior_pos_weight_cap=5.0):
+    severity_consistency_loss=False, severity_consistency_weight=0.1, severity_loss_type="l1", label_smoothing=0.0, dice_class_start=0, dice_loss_weight=1.0, lesion_prior_loss=False, lesion_prior_weight=0.05, lesion_prior_pos_weight_cap=5.0):
     total_loss      = 0
     total_f_score   = 0
 
@@ -98,7 +98,7 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
 
             if dice_loss:
                 main_dice = Dice_loss(outputs, labels, class_start=dice_class_start)
-                loss      = loss + main_dice
+                loss      = loss + dice_loss_weight * main_dice
 
             if component_aux:
                 loss = loss + Component_Aux_Loss(
@@ -151,7 +151,7 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
 
                 if dice_loss:
                     main_dice = Dice_loss(outputs, labels, class_start=dice_class_start)
-                    loss      = loss + main_dice
+                    loss      = loss + dice_loss_weight * main_dice
 
                 if component_aux:
                     loss = loss + Component_Aux_Loss(
@@ -231,7 +231,7 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
 
             if dice_loss:
                 main_dice = Dice_loss(outputs, labels, class_start=dice_class_start)
-                loss  = loss + main_dice
+                loss  = loss + dice_loss_weight * main_dice
             if lesion_prior_loss:
                 loss = loss + lesion_prior_weight * Lesion_Prior_Loss(
                     outputs,

@@ -87,6 +87,7 @@ def parse_args():
     parser.add_argument("--vocdevkit-path", type=str, default="VOCdevkit")
     parser.add_argument("--dice-loss", type=str2bool, default=False)
     parser.add_argument("--dice-class-start", type=int, default=0, help="First class index included in Dice loss. 0 keeps the legacy all-class Dice.")
+    parser.add_argument("--dice-loss-weight", type=float, default=1.0, help="Weight applied to Dice loss when --dice-loss is enabled.")
     parser.add_argument("--focal-loss", type=str2bool, default=False)
     parser.add_argument("--focal-alpha", type=float, default=0.5)
     parser.add_argument("--focal-gamma", type=float, default=2.0)
@@ -309,6 +310,8 @@ if __name__ == "__main__":
         raise ValueError("--label-smoothing must be in [0.0, 1.0).")
     if not 0 <= args.dice_class_start < args.num_classes:
         raise ValueError("--dice-class-start must be in [0, num_classes).")
+    if args.dice_loss_weight < 0:
+        raise ValueError("--dice-loss-weight must be non-negative.")
     if args.lesion_prior_weight < 0:
         raise ValueError("--lesion-prior-weight must be non-negative.")
     if args.lesion_prior_pos_weight_cap < 1:
@@ -458,6 +461,7 @@ if __name__ == "__main__":
             log_dir=log_dir,
             dice_loss=args.dice_loss,
             dice_class_start=args.dice_class_start,
+            dice_loss_weight=args.dice_loss_weight,
             focal_loss=args.focal_loss,
             focal_alpha=args.focal_alpha,
             focal_gamma=args.focal_gamma,
@@ -691,6 +695,7 @@ if __name__ == "__main__":
             severity_loss_type=args.severity_loss_type,
             label_smoothing=args.label_smoothing,
             dice_class_start=args.dice_class_start,
+            dice_loss_weight=args.dice_loss_weight,
             lesion_prior_loss=args.lesion_prior_loss,
             lesion_prior_weight=args.lesion_prior_weight,
             lesion_prior_pos_weight_cap=args.lesion_prior_pos_weight_cap,
