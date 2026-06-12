@@ -61,6 +61,7 @@ def parse_args():
     parser.add_argument("--attention-aspp-type", type=str, default=None, help="Attention after ASPP. Defaults to --attention-type.")
     parser.add_argument("--attention-decoder-type", type=str, default=None, help="Attention after decoder fusion. Defaults to --attention-type.")
     parser.add_argument("--decoder-conv-type", type=str, default="standard", choices=["standard", "pconv", "repconv"])
+    parser.add_argument("--decoder-upsample-type", type=str, default="bilinear", choices=["bilinear", "dysample"])
     parser.add_argument("--use-ppm", type=str2bool, default=False)
     parser.add_argument("--ppm-bins", nargs="+", type=int, default=[1, 2, 3, 6])
     parser.add_argument("--input-shape", nargs=2, type=int, default=[512, 512], metavar=("H", "W"))
@@ -85,9 +86,11 @@ def parse_args():
     parser.add_argument("--datasets-root", type=str, default=".")
     parser.add_argument("--vocdevkit-path", type=str, default="VOCdevkit")
     parser.add_argument("--dice-loss", type=str2bool, default=False)
+    parser.add_argument("--dice-class-start", type=int, default=0, help="First class index included in Dice loss. 0 keeps the legacy all-class Dice.")
     parser.add_argument("--focal-loss", type=str2bool, default=False)
     parser.add_argument("--focal-alpha", type=float, default=0.5)
     parser.add_argument("--focal-gamma", type=float, default=2.0)
+    parser.add_argument("--label-smoothing", type=float, default=0.0, help="Label smoothing epsilon for CE-style semantic segmentation losses.")
     parser.add_argument("--lbft-loss", type=str2bool, default=False, help="Use LBFTLoss: Weighted CE + lambda * Focal Tversky.")
     parser.add_argument("--lbft-lambda", type=float, default=1.0, help="Weight of the Focal Tversky term in LBFTLoss.")
     parser.add_argument("--lbft-alpha", type=float, default=0.3, help="False-positive weight in Focal Tversky.")
@@ -117,6 +120,13 @@ def parse_args():
     parser.add_argument("--lesion-cross-scale-fusion-alpha", type=float, default=0.5)
     parser.add_argument("--lesion-local-global-context", type=str2bool, default=False, help="Use Local-Global Lesion Context Block after ASPP.")
     parser.add_argument("--lesion-local-global-context-alpha", type=float, default=0.5)
+    parser.add_argument("--component-high-frequency-refinement", type=str2bool, default=False, help="Use component-gated high-frequency refinement after LBSB.")
+    parser.add_argument("--component-high-frequency-refinement-alpha", type=float, default=0.2)
+    parser.add_argument("--component-feedback-refine", type=str2bool, default=False, help="Use lightweight component feedback refinement before the final segmentation head.")
+    parser.add_argument("--component-feedback-refine-alpha", type=float, default=0.15)
+    parser.add_argument("--lesion-prior-loss", type=str2bool, default=False, help="Use weak binary lesion prior loss on main segmentation logits.")
+    parser.add_argument("--lesion-prior-weight", type=float, default=0.05)
+    parser.add_argument("--lesion-prior-pos-weight-cap", type=float, default=5.0)
     parser.add_argument("--severity-consistency-loss", type=str2bool, default=False, help="Constrain predicted lesion/leaf ratio to match ground truth severity.")
     parser.add_argument("--severity-consistency-weight", type=float, default=0.1)
     parser.add_argument("--severity-loss-type", type=str, default="l1", choices=["l1", "smooth_l1", "mse"])
@@ -243,10 +253,20 @@ def auto_export_report(args, dataset_path):
         str(args.lesion_local_global_context).lower(),
         "--lesion-local-global-context-alpha",
         str(args.lesion_local_global_context_alpha),
+        "--component-high-frequency-refinement",
+        str(args.component_high_frequency_refinement).lower(),
+        "--component-high-frequency-refinement-alpha",
+        str(args.component_high_frequency_refinement_alpha),
+        "--component-feedback-refine",
+        str(args.component_feedback_refine).lower(),
+        "--component-feedback-refine-alpha",
+        str(args.component_feedback_refine_alpha),
         "--downsample-factor",
         str(args.downsample_factor),
         "--decoder-conv-type",
         args.decoder_conv_type,
+        "--decoder-upsample-type",
+        args.decoder_upsample_type,
         "--input-shape",
         str(args.input_shape[0]),
         str(args.input_shape[1]),
@@ -285,6 +305,14 @@ if __name__ == "__main__":
     dataset_path = resolve_dataset_path(args)
     if args.lbft_loss and (args.dice_loss or args.focal_loss):
         raise ValueError("--lbft-loss already combines Weighted CE and Focal Tversky. Set --dice-loss false and --focal-loss false.")
+    if not 0.0 <= args.label_smoothing < 1.0:
+        raise ValueError("--label-smoothing must be in [0.0, 1.0).")
+    if not 0 <= args.dice_class_start < args.num_classes:
+        raise ValueError("--dice-class-start must be in [0, num_classes).")
+    if args.lesion_prior_weight < 0:
+        raise ValueError("--lesion-prior-weight must be non-negative.")
+    if args.lesion_prior_pos_weight_cap < 1:
+        raise ValueError("--lesion-prior-pos-weight-cap must be >= 1.")
 
     seed_everything(args.seed)
     ngpus_per_node = torch.cuda.device_count()
@@ -321,6 +349,7 @@ if __name__ == "__main__":
         attention_aspp_type=args.attention_aspp_type,
         attention_decoder_type=args.attention_decoder_type,
         decoder_conv_type=args.decoder_conv_type,
+        decoder_upsample_type=args.decoder_upsample_type,
         use_ppm=args.use_ppm,
         ppm_bins=args.ppm_bins,
         use_component_aux=args.component_aux,
@@ -330,6 +359,10 @@ if __name__ == "__main__":
         lcaf_alpha=args.lesion_cross_scale_fusion_alpha,
         use_lglc=args.lesion_local_global_context,
         lglc_alpha=args.lesion_local_global_context_alpha,
+        use_chfr=args.component_high_frequency_refinement,
+        chfr_alpha=args.component_high_frequency_refinement_alpha,
+        use_cfr=args.component_feedback_refine,
+        cfr_alpha=args.component_feedback_refine_alpha,
     )
     if not args.pretrained:
         weights_init(model)
@@ -404,6 +437,7 @@ if __name__ == "__main__":
             attention_aspp_type=args.attention_aspp_type,
             attention_decoder_type=args.attention_decoder_type,
             decoder_conv_type=args.decoder_conv_type,
+            decoder_upsample_type=args.decoder_upsample_type,
             use_ppm=args.use_ppm,
             ppm_bins=args.ppm_bins,
             model_path=args.model_path,
@@ -423,9 +457,11 @@ if __name__ == "__main__":
             save_dir=args.save_dir,
             log_dir=log_dir,
             dice_loss=args.dice_loss,
+            dice_class_start=args.dice_class_start,
             focal_loss=args.focal_loss,
             focal_alpha=args.focal_alpha,
             focal_gamma=args.focal_gamma,
+            label_smoothing=args.label_smoothing,
             lbft_loss=args.lbft_loss,
             lbft_lambda=args.lbft_lambda,
             lbft_alpha=args.lbft_alpha,
@@ -448,6 +484,13 @@ if __name__ == "__main__":
             lesion_cross_scale_fusion_alpha=args.lesion_cross_scale_fusion_alpha,
             lesion_local_global_context=args.lesion_local_global_context,
             lesion_local_global_context_alpha=args.lesion_local_global_context_alpha,
+            component_high_frequency_refinement=args.component_high_frequency_refinement,
+            component_high_frequency_refinement_alpha=args.component_high_frequency_refinement_alpha,
+            component_feedback_refine=args.component_feedback_refine,
+            component_feedback_refine_alpha=args.component_feedback_refine_alpha,
+            lesion_prior_loss=args.lesion_prior_loss,
+            lesion_prior_weight=args.lesion_prior_weight,
+            lesion_prior_pos_weight_cap=args.lesion_prior_pos_weight_cap,
             severity_consistency_loss=args.severity_consistency_loss,
             severity_consistency_weight=args.severity_consistency_weight,
             severity_loss_type=args.severity_loss_type,
@@ -646,6 +689,11 @@ if __name__ == "__main__":
             severity_consistency_loss=args.severity_consistency_loss,
             severity_consistency_weight=args.severity_consistency_weight,
             severity_loss_type=args.severity_loss_type,
+            label_smoothing=args.label_smoothing,
+            dice_class_start=args.dice_class_start,
+            lesion_prior_loss=args.lesion_prior_loss,
+            lesion_prior_weight=args.lesion_prior_weight,
+            lesion_prior_pos_weight_cap=args.lesion_prior_pos_weight_cap,
         )
 
         if args.distributed:

@@ -73,6 +73,7 @@ def parse_args():
     parser.add_argument("--attention-aspp-type", type=str, default=None)
     parser.add_argument("--attention-decoder-type", type=str, default=None)
     parser.add_argument("--decoder-conv-type", type=str, default="standard", choices=["standard", "pconv", "repconv"])
+    parser.add_argument("--decoder-upsample-type", type=str, default="bilinear", choices=["bilinear", "dysample"])
     parser.add_argument("--use-ppm", type=str2bool, default=False)
     parser.add_argument("--component-aux", type=str2bool, default=False)
     parser.add_argument("--lesion-boundary-sharpen", type=str2bool, default=False)
@@ -81,6 +82,10 @@ def parse_args():
     parser.add_argument("--lesion-cross-scale-fusion-alpha", type=float, default=0.5)
     parser.add_argument("--lesion-local-global-context", type=str2bool, default=False)
     parser.add_argument("--lesion-local-global-context-alpha", type=float, default=0.5)
+    parser.add_argument("--component-high-frequency-refinement", type=str2bool, default=False)
+    parser.add_argument("--component-high-frequency-refinement-alpha", type=float, default=0.2)
+    parser.add_argument("--component-feedback-refine", type=str2bool, default=False)
+    parser.add_argument("--component-feedback-refine-alpha", type=float, default=0.15)
     parser.add_argument("--downsample-factor", type=int, default=16)
     parser.add_argument("--input-shape", nargs=2, type=int, default=[512, 512], metavar=("H", "W"))
     parser.add_argument("--cuda", type=str2bool, default=True)
@@ -370,6 +375,7 @@ def build_predictor(args):
                 "attention_aspp_type": attention_aspp_type,
                 "attention_decoder_type": attention_decoder_type,
                 "decoder_conv_type": args.decoder_conv_type,
+                "decoder_upsample_type": args.decoder_upsample_type,
                 "component_aux": args.component_aux,
                 "lesion_boundary_sharpen": args.lesion_boundary_sharpen,
                 "lesion_boundary_sharpen_alpha": args.lesion_boundary_sharpen_alpha,
@@ -377,6 +383,10 @@ def build_predictor(args):
                 "lesion_cross_scale_fusion_alpha": args.lesion_cross_scale_fusion_alpha,
                 "lesion_local_global_context": args.lesion_local_global_context,
                 "lesion_local_global_context_alpha": args.lesion_local_global_context_alpha,
+                "component_high_frequency_refinement": args.component_high_frequency_refinement,
+                "component_high_frequency_refinement_alpha": args.component_high_frequency_refinement_alpha,
+                "component_feedback_refine": args.component_feedback_refine,
+                "component_feedback_refine_alpha": args.component_feedback_refine_alpha,
             }
         )
     return Predictor(**kwargs)
@@ -395,7 +405,28 @@ def export_predictions(args, image_ids, pred_dir):
     return predictor
 
 
-def compute_complexity(args, sample_image_path):
+def model_from_predictor(predictor):
+    model = getattr(predictor, "net", None)
+    if isinstance(model, torch.nn.DataParallel):
+        model = model.module
+    return model
+
+
+def prepare_predictor_for_benchmark(predictor, use_cuda):
+    if predictor is None:
+        return
+    predictor.cuda = bool(use_cuda)
+    model = getattr(predictor, "net", None)
+    if model is None:
+        return
+    if use_cuda:
+        predictor.net = model.cuda()
+    else:
+        predictor.net = model.cpu()
+    predictor.net.eval()
+
+
+def compute_complexity(args, sample_image_path, predictor=None):
     _, Model = load_model_api(args)
     device = torch.device("cuda" if args.cuda and torch.cuda.is_available() else "cpu")
     attention_type = "" if args.attention_type.lower() in {"none", "identity"} else args.attention_type
@@ -403,7 +434,10 @@ def compute_complexity(args, sample_image_path):
     attention_high_type = normalize_attention_type(args.attention_high_type)
     attention_aspp_type = normalize_attention_type(args.attention_aspp_type)
     attention_decoder_type = normalize_attention_type(args.attention_decoder_type)
-    if args.model_adapter == "deeplabv3plus":
+    model = model_from_predictor(predictor) if predictor is not None else None
+    if model is not None:
+        model = model.to(device).eval()
+    elif args.model_adapter == "deeplabv3plus":
         model = Model(
             num_classes=args.num_classes,
             backbone=args.backbone,
@@ -415,6 +449,7 @@ def compute_complexity(args, sample_image_path):
             attention_aspp_type=attention_aspp_type,
             attention_decoder_type=attention_decoder_type,
             decoder_conv_type=args.decoder_conv_type,
+            decoder_upsample_type=args.decoder_upsample_type,
             use_ppm=args.use_ppm,
             use_component_aux=args.component_aux,
             use_lbsb=args.lesion_boundary_sharpen,
@@ -423,6 +458,10 @@ def compute_complexity(args, sample_image_path):
             lcaf_alpha=args.lesion_cross_scale_fusion_alpha,
             use_lglc=args.lesion_local_global_context,
             lglc_alpha=args.lesion_local_global_context_alpha,
+            use_chfr=args.component_high_frequency_refinement,
+            chfr_alpha=args.component_high_frequency_refinement_alpha,
+            use_cfr=args.component_feedback_refine,
+            cfr_alpha=args.component_feedback_refine_alpha,
         ).to(device)
     else:
         model = Model(
@@ -447,7 +486,10 @@ def compute_complexity(args, sample_image_path):
     except Exception as exc:  # noqa: BLE001
         thop_error = str(exc)
 
-    predictor = build_predictor(args)
+    if predictor is None:
+        predictor = build_predictor(args)
+    else:
+        prepare_predictor_for_benchmark(predictor, device.type == "cuda")
     sample_image = Image.open(sample_image_path)
     start = time.perf_counter()
     time_per_image = predictor.get_FPS(sample_image, args.fps_interval)
@@ -504,6 +546,7 @@ def main():
         "attention_aspp_type": args.attention_aspp_type,
         "attention_decoder_type": args.attention_decoder_type,
         "decoder_conv_type": args.decoder_conv_type,
+        "decoder_upsample_type": args.decoder_upsample_type,
         "use_ppm": args.use_ppm,
         "component_aux": args.component_aux,
         "lesion_boundary_sharpen": args.lesion_boundary_sharpen,
@@ -512,6 +555,10 @@ def main():
         "lesion_cross_scale_fusion_alpha": args.lesion_cross_scale_fusion_alpha,
         "lesion_local_global_context": args.lesion_local_global_context,
         "lesion_local_global_context_alpha": args.lesion_local_global_context_alpha,
+        "component_high_frequency_refinement": args.component_high_frequency_refinement,
+        "component_high_frequency_refinement_alpha": args.component_high_frequency_refinement_alpha,
+        "component_feedback_refine": args.component_feedback_refine,
+        "component_feedback_refine_alpha": args.component_feedback_refine_alpha,
         "downsample_factor": args.downsample_factor,
         "input_shape": args.input_shape,
         "cuda": args.cuda,
@@ -522,8 +569,9 @@ def main():
     }
     write_json(output_dir / "run_config.json", run_config)
 
+    predictor = None
     if not args.skip_predict:
-        export_predictions(args, image_ids, pred_dir)
+        predictor = export_predictions(args, image_ids, pred_dir)
 
     gt_dir = args.vocdevkit_path / "VOC2007" / "SegmentationClass"
     hist = np.zeros((args.num_classes, args.num_classes), dtype=np.int64)
@@ -564,7 +612,7 @@ def main():
     )
 
     sample_image = args.vocdevkit_path / "VOC2007" / "JPEGImages" / f"{image_ids[0]}.jpg"
-    complexity = compute_complexity(args, sample_image)
+    complexity = compute_complexity(args, sample_image, predictor)
     write_json(output_dir / "complexity.json", complexity)
 
     print(f"Saved report to: {output_dir}")

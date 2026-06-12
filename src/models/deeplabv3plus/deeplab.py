@@ -45,6 +45,7 @@ class DeeplabV3(object):
         "attention_aspp_type": "auto",
         "attention_decoder_type": "auto",
         "decoder_conv_type": "auto",
+        "decoder_upsample_type": "auto",
         "use_ppm"           : "auto",
         "lesion_boundary_sharpen": "auto",
         "lesion_boundary_sharpen_alpha": 0.25,
@@ -52,6 +53,10 @@ class DeeplabV3(object):
         "lesion_cross_scale_fusion_alpha": 0.5,
         "lesion_local_global_context": "auto",
         "lesion_local_global_context_alpha": 0.5,
+        "component_high_frequency_refinement": "auto",
+        "component_high_frequency_refinement_alpha": 0.2,
+        "component_feedback_refine": "auto",
+        "component_feedback_refine_alpha": 0.15,
         #----------------------------------------#
         #   输入图片的大小
         #----------------------------------------#
@@ -147,6 +152,13 @@ class DeeplabV3(object):
             return "repconv"
         return "standard"
 
+    def _resolve_decoder_upsample_type(self, checkpoint):
+        if self.decoder_upsample_type and self.decoder_upsample_type != "auto":
+            return self.decoder_upsample_type
+        if any(key.startswith("decoder_upsample.") for key in checkpoint.keys()):
+            return "dysample"
+        return "bilinear"
+
     def _resolve_use_component_aux(self, checkpoint):
         return any(key.startswith(("lesion_aux_head.", "boundary_aux_head.", "center_aux_head.")) for key in checkpoint.keys())
 
@@ -170,6 +182,23 @@ class DeeplabV3(object):
         if isinstance(self.lesion_local_global_context, str) and self.lesion_local_global_context.lower() != "auto":
             return self.lesion_local_global_context.lower() in {"true", "1", "yes", "y"}
         return any(key.startswith("lglc.") for key in checkpoint.keys())
+
+    def _resolve_use_chfr(self, checkpoint):
+        if isinstance(self.component_high_frequency_refinement, bool):
+            return self.component_high_frequency_refinement
+        if (
+            isinstance(self.component_high_frequency_refinement, str)
+            and self.component_high_frequency_refinement.lower() != "auto"
+        ):
+            return self.component_high_frequency_refinement.lower() in {"true", "1", "yes", "y"}
+        return any(key.startswith("chfr.") for key in checkpoint.keys())
+
+    def _resolve_use_cfr(self, checkpoint):
+        if isinstance(self.component_feedback_refine, bool):
+            return self.component_feedback_refine
+        if isinstance(self.component_feedback_refine, str) and self.component_feedback_refine.lower() != "auto":
+            return self.component_feedback_refine.lower() in {"true", "1", "yes", "y"}
+        return any(key.startswith("cfr.") for key in checkpoint.keys())
 
     @staticmethod
     def _main_output(output):
@@ -225,10 +254,13 @@ class DeeplabV3(object):
         attention_decoder_type = self._resolve_stage_attention_type(checkpoint, "attention_decoder_type", "attention_decoder.", attention_type)
         use_ppm = self._resolve_use_ppm(checkpoint)
         decoder_conv_type = self._resolve_decoder_conv_type(checkpoint)
+        decoder_upsample_type = self._resolve_decoder_upsample_type(checkpoint)
         use_component_aux = self._resolve_use_component_aux(checkpoint)
         use_lbsb = self._resolve_use_lbsb(checkpoint)
         use_lcaf = self._resolve_use_lcaf(checkpoint)
         use_lglc = self._resolve_use_lglc(checkpoint)
+        use_chfr = self._resolve_use_chfr(checkpoint)
+        use_cfr = self._resolve_use_cfr(checkpoint)
         self.net = DeepLab(
             num_classes=self.num_classes,
             backbone=backbone,
@@ -240,6 +272,7 @@ class DeeplabV3(object):
             attention_aspp_type=attention_aspp_type,
             attention_decoder_type=attention_decoder_type,
             decoder_conv_type=decoder_conv_type,
+            decoder_upsample_type=decoder_upsample_type,
             use_ppm=use_ppm,
             use_component_aux=use_component_aux,
             use_lbsb=use_lbsb,
@@ -248,13 +281,17 @@ class DeeplabV3(object):
             lcaf_alpha=float(self.lesion_cross_scale_fusion_alpha),
             use_lglc=use_lglc,
             lglc_alpha=float(self.lesion_local_global_context_alpha),
+            use_chfr=use_chfr,
+            chfr_alpha=float(self.component_high_frequency_refinement_alpha),
+            use_cfr=use_cfr,
+            cfr_alpha=float(self.component_feedback_refine_alpha),
         )
 
         device      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.net.load_state_dict(checkpoint)
         self.net    = self.net.eval()
         print(
-            '{} model, backbone={}, attention=global:{}, low:{}, high:{}, aspp:{}, decoder:{}, decoder_conv={}, use_ppm={}, lbsb={}, lcaf={}, lglc={}, and classes loaded.'.format(
+            '{} model, backbone={}, attention=global:{}, low:{}, high:{}, aspp:{}, decoder:{}, decoder_conv={}, decoder_upsample={}, use_ppm={}, lbsb={}, lcaf={}, lglc={}, chfr={}, cfr={}, and classes loaded.'.format(
                 self.model_path,
                 backbone,
                 attention_type or 'none',
@@ -263,10 +300,13 @@ class DeeplabV3(object):
                 attention_aspp_type or 'none',
                 attention_decoder_type or 'none',
                 decoder_conv_type,
+                decoder_upsample_type,
                 use_ppm,
                 use_lbsb,
                 use_lcaf,
                 use_lglc,
+                use_chfr,
+                use_cfr,
             )
         )
         if not onnx:

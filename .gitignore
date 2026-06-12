@@ -18,6 +18,7 @@ checkpoints/
 # Local datasets and generated VOC folders
 VOCdevkit/
 datasets/
+external/
 
 # OS/editor
 .DS_Store

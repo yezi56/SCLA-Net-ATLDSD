@@ -15,3 +15,6 @@
 | Boundary2 | Mainline1 + PConv + LBSB | decoder locality + boundary sharpening | done | 71.68 | 66.54 | 0.01281 | 93.50 | 10.65 | 6.52 | no PConv-LBSB synergy; do not keep PConv |
 | Fusion1 | Mainline1 + LBSB + LCAF | lesion-aware cross-scale fusion | done | 72.68 | 67.70 | 0.01169 | 93.90 | 11.76 | 15.53 | close, but below Boundary1; do not replace LBSB-only |
 | Context1 | Mainline1 + LBSB + LGLC | local-global lesion context | done | 72.31 | 67.26 | 0.01170 | 93.50 | 11.84 | 15.33 | below Boundary1; keep as negative context ablation |
+| Final-LGC-LCSF | Boundary1 + SP decoder + LGC + LCSF | balanced-prefix full e80, dual-seed avg | done | 76.60 | 72.22 | 0.00965 | 94.92 | 12.14 | 38.37 | previous pre-RepConv mainline |
+| Final-RepConv | Final-LGC-LCSF + RepConv decoder | full e80, dual-seed avg | done | 76.94 | 72.63 | 0.01030 | 93.29 | 12.28 | 41.07 | previous official mainline |
+| Final-LesionDice2 | Final-RepConv + lesion-only Dice | full e80, dual-seed avg | done | 77.10 | 72.83 | 0.01012 | 94.51 | 12.28 | 41.07 | current official mainline |

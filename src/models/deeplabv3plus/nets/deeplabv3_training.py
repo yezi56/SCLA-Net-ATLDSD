@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def CE_Loss(inputs, target, cls_weights, num_classes=21):
+def CE_Loss(inputs, target, cls_weights, num_classes=21, label_smoothing=0.0):
     if isinstance(inputs, dict):
         inputs = inputs["logits"]
     n, c, h, w = inputs.size()
@@ -17,11 +17,15 @@ def CE_Loss(inputs, target, cls_weights, num_classes=21):
     temp_inputs = inputs.transpose(1, 2).transpose(2, 3).contiguous().view(-1, c)
     temp_target = target.view(-1)
 
-    CE_loss  = nn.CrossEntropyLoss(weight=cls_weights, ignore_index=num_classes)(temp_inputs, temp_target)
+    CE_loss  = nn.CrossEntropyLoss(
+        weight=cls_weights,
+        ignore_index=num_classes,
+        label_smoothing=label_smoothing,
+    )(temp_inputs, temp_target)
     return CE_loss
 
 
-def Softmax_CE_Loss(inputs, soft_target, cls_weights, num_classes=21):
+def Softmax_CE_Loss(inputs, soft_target, cls_weights, num_classes=21, label_smoothing=0.0):
     if isinstance(inputs, dict):
         inputs = inputs["logits"]
     n, c, h, w = inputs.size()
@@ -33,6 +37,8 @@ def Softmax_CE_Loss(inputs, soft_target, cls_weights, num_classes=21):
     soft_target = soft_target.view(n, -1, ct)
     class_target = soft_target[..., :num_classes]
     valid_mask = (1.0 - soft_target[..., num_classes]).float()
+    if label_smoothing > 0:
+        class_target = class_target * (1.0 - label_smoothing) + label_smoothing / num_classes
 
     if cls_weights is not None:
         class_target = class_target * cls_weights.view(1, 1, -1)
@@ -90,7 +96,7 @@ def Focal_Loss(inputs, target, cls_weights, num_classes=21, alpha=0.5, gamma=2):
     loss = loss.mean()
     return loss
 
-def Dice_loss(inputs, target, beta=1, smooth = 1e-5):
+def Dice_loss(inputs, target, beta=1, smooth = 1e-5, class_start=0):
     if isinstance(inputs, dict):
         inputs = inputs["logits"]
     n, c, h, w = inputs.size()
@@ -104,9 +110,14 @@ def Dice_loss(inputs, target, beta=1, smooth = 1e-5):
     #--------------------------------------------#
     #   计算dice loss
     #--------------------------------------------#
-    tp = torch.sum(temp_target[...,:-1] * temp_inputs, axis=[0,1])
-    fp = torch.sum(temp_inputs                       , axis=[0,1]) - tp
-    fn = torch.sum(temp_target[...,:-1]              , axis=[0,1]) - tp
+    class_target = temp_target[..., :c]
+    if class_start > 0:
+        temp_inputs = temp_inputs[..., class_start:]
+        class_target = class_target[..., class_start:]
+
+    tp = torch.sum(class_target * temp_inputs, axis=[0,1])
+    fp = torch.sum(temp_inputs                , axis=[0,1]) - tp
+    fn = torch.sum(class_target               , axis=[0,1]) - tp
 
     score = ((1 + beta ** 2) * tp + smooth) / ((1 + beta ** 2) * tp + beta ** 2 * fn + fp + smooth)
     dice_loss = 1 - torch.mean(score)
@@ -195,6 +206,31 @@ def Component_Aux_Loss(outputs, target, num_classes, lesion_weight=0.4, boundary
     if not losses:
         return outputs["logits"].sum() * 0.0
     return sum(losses)
+
+
+def Lesion_Prior_Loss(inputs, target, num_classes, pos_weight_cap=5.0):
+    if isinstance(inputs, dict):
+        inputs = inputs["logits"]
+
+    n, c, h, w = inputs.size()
+    nt, ht, wt = target.size()
+    if h != ht or w != wt:
+        inputs = F.interpolate(inputs, size=(ht, wt), mode="bilinear", align_corners=True)
+
+    valid = target != num_classes
+    lesion_target = ((target >= 2) & (target < num_classes) & valid).float()
+    probs = torch.softmax(inputs, dim=1)
+    lesion_prob = probs[:, 2:num_classes].sum(dim=1).clamp(min=1e-6, max=1.0 - 1e-6)
+
+    valid_logits = torch.logit(lesion_prob[valid])
+    valid_target = lesion_target[valid]
+    if valid_target.numel() == 0:
+        return inputs.sum() * 0.0
+
+    positives = (valid_target > 0.5).sum().float()
+    negatives = (valid_target <= 0.5).sum().float()
+    pos_weight = (negatives / positives.clamp(min=1.0)).clamp(min=1.0, max=float(pos_weight_cap))
+    return F.binary_cross_entropy_with_logits(valid_logits, valid_target, pos_weight=pos_weight)
 
 
 def Severity_Consistency_Loss(inputs, target, num_classes, loss_type="l1", smooth=1e-6):

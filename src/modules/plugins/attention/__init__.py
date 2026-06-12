@@ -11,12 +11,15 @@ from .eca import EfficientChannelAttention
 from .ela import ELAAttention
 from .ema import EMAAttention
 from .emcam import EMCAM
+from .fchilo import FCHiLoAttention
 from .gam import GAMAttention
+from .gct import GCTAttention
 from .gc import GlobalContextBlock
 from .ghost import GhostModule
 from .lsk import LSKAttention
 from .mlca import MLCAAttention
 from .ppm import PyramidPoolingPlugin
+from .rcm import RCMAttention
 from .scsa import SCSAAttention
 from .scse import ScSEAttention
 from .se import SEAttention
@@ -24,6 +27,7 @@ from .shsa import SHSAAttention
 from .shuffle import ShuffleAttention
 from .simam import SimAM
 from .sk import SKAttention
+from .sp_gct import SPGCTAttention
 from .strip_pooling import StripPoolingAttention
 from .triplet import TripletAttention
 
@@ -41,12 +45,15 @@ __all__ = [
     "EMCAM",
     "EMAAttention",
     "EfficientChannelAttention",
+    "FCHiLoAttention",
     "GAMAttention",
+    "GCTAttention",
     "GhostModule",
     "GlobalContextBlock",
     "LSKAttention",
     "MLCAAttention",
     "PyramidPoolingPlugin",
+    "RCMAttention",
     "SCSAAttention",
     "SEAttention",
     "SHSAAttention",
@@ -54,6 +61,7 @@ __all__ = [
     "ScSEAttention",
     "ShuffleAttention",
     "SimAM",
+    "SPGCTAttention",
     "StripPoolingAttention",
     "TripletAttention",
 ]

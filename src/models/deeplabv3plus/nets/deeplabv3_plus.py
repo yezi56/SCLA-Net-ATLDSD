@@ -27,6 +27,60 @@ def _resolve_attention_type(global_type, stage_type):
     return global_type if stage_type is None else stage_type
 
 
+def _make_base_grid(scale, groups):
+    h = torch.arange((-scale + 1) / 2, (scale - 1) / 2 + 1) / scale
+    grid_y, grid_x = torch.meshgrid(h, h, indexing="ij")
+    return torch.stack([grid_x, grid_y]).transpose(1, 2).repeat(1, groups, 1).reshape(1, -1, 1, 1)
+
+
+class DySample(nn.Module):
+    """Lightweight learned upsampling initialized near bilinear sampling."""
+
+    def __init__(self, channels, scale=2, groups=4):
+        super().__init__()
+        if channels % groups != 0:
+            raise ValueError(f"DySample channels ({channels}) must be divisible by groups ({groups}).")
+        self.scale = int(scale)
+        self.groups = int(groups)
+        self.offset = nn.Conv2d(channels, 2 * groups * self.scale * self.scale, 1)
+        nn.init.normal_(self.offset.weight, mean=0.0, std=0.001)
+        nn.init.constant_(self.offset.bias, 0.0)
+        self.register_buffer("init_pos", _make_base_grid(self.scale, groups))
+
+    def forward(self, x):
+        b, _, h, w = x.shape
+        offset = self.offset(x) * 0.25 + self.init_pos
+        offset = offset.view(b, 2, -1, h, w)
+
+        coords_y = torch.arange(h, dtype=x.dtype, device=x.device) + 0.5
+        coords_x = torch.arange(w, dtype=x.dtype, device=x.device) + 0.5
+        grid_y, grid_x = torch.meshgrid(coords_y, coords_x, indexing="ij")
+        coords = torch.stack([grid_x, grid_y]).unsqueeze(1).unsqueeze(0)
+        normalizer = torch.tensor([w, h], dtype=x.dtype, device=x.device).view(1, 2, 1, 1, 1)
+        coords = 2 * (coords + offset) / normalizer - 1
+        coords = F.pixel_shuffle(coords.view(b, -1, h, w), self.scale)
+        coords = coords.view(b, 2, -1, self.scale * h, self.scale * w)
+        coords = coords.permute(0, 2, 3, 4, 1).contiguous().flatten(0, 1)
+
+        sampled = F.grid_sample(
+            x.reshape(b * self.groups, -1, h, w),
+            coords,
+            mode="bilinear",
+            align_corners=False,
+            padding_mode="border",
+        )
+        return sampled.view(b, -1, self.scale * h, self.scale * w)
+
+
+def build_decoder_upsample(upsample_type, channels, scale):
+    upsample_type = (upsample_type or "bilinear").lower().strip()
+    if upsample_type in {"bilinear", "interpolate", "none"}:
+        return None
+    if upsample_type in {"dysample", "dy_sample"}:
+        return DySample(channels, scale=scale)
+    raise ValueError("Unsupported decoder upsample type: {}".format(upsample_type))
+
+
 class ASPP(nn.Module):
     def __init__(self, dim_in, dim_out, rate=1, bn_mom=0.1):
         super().__init__()
@@ -200,6 +254,41 @@ class RepConvBlock(nn.Module):
         identity = 0 if self.rbr_identity is None else self.rbr_identity(x)
         return self.act(self.rbr_dense(x) + self.rbr_1x1(x) + identity)
 
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        if prefix + "rbr_reparam.weight" in state_dict and not hasattr(self, "rbr_reparam"):
+            self.rbr_reparam = nn.Conv2d(
+                self.in_channels,
+                self.out_channels,
+                3,
+                stride=self.stride,
+                padding=self.padding,
+                bias=True,
+            )
+            if hasattr(self, "rbr_dense"):
+                del self.rbr_dense
+            if hasattr(self, "rbr_1x1"):
+                del self.rbr_1x1
+            if hasattr(self, "rbr_identity"):
+                del self.rbr_identity
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
+
     @staticmethod
     def _pad_1x1_to_3x3(kernel):
         return F.pad(kernel, [1, 1, 1, 1]) if kernel is not None else 0
@@ -307,6 +396,71 @@ class LesionBoundarySharpeningBlock(nn.Module):
         return feature + self.alpha * edge * gate
 
 
+class ComponentGuidedHighFrequencyRefinementBlock(nn.Module):
+    def __init__(self, channels, alpha=0.2, bn_mom=0.1):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = nn.Parameter(torch.zeros(1))
+        self.smooth = nn.AvgPool2d(kernel_size=3, stride=1, padding=1)
+        self.frequency_refine = nn.Sequential(
+            nn.Conv2d(channels, channels, 3, padding=1, groups=channels, bias=False),
+            nn.BatchNorm2d(channels, momentum=bn_mom),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels, channels, 1, bias=False),
+            nn.BatchNorm2d(channels, momentum=bn_mom),
+        )
+        self.component_gate = nn.Sequential(
+            nn.Conv2d(3, channels, 1, bias=True),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, feature, lesion_logits, boundary_logits, center_logits):
+        component_logits = [lesion_logits, boundary_logits, center_logits]
+        resized_logits = []
+        for logits in component_logits:
+            if logits.shape[-2:] != feature.shape[-2:]:
+                logits = F.interpolate(logits, size=feature.shape[-2:], mode="bilinear", align_corners=True)
+            resized_logits.append(torch.sigmoid(logits))
+
+        high_frequency = feature - self.smooth(feature)
+        refined = self.frequency_refine(high_frequency)
+        component_probs = torch.cat(resized_logits, dim=1)
+        gate = self.component_gate(component_probs)
+        confidence = component_probs.max(dim=1, keepdim=True).values
+        return feature + self.alpha * torch.tanh(self.gamma) * confidence * gate * refined
+
+
+class ComponentFeedbackRefinementBlock(nn.Module):
+    """Use lesion/boundary/center component cues to softly refine decoder features."""
+
+    def __init__(self, channels, alpha=0.15, bn_mom=0.1):
+        super().__init__()
+        self.alpha = alpha
+        self.feedback_gate = nn.Sequential(
+            nn.Conv2d(3, channels, 1, bias=True),
+            nn.Sigmoid(),
+        )
+        self.refine = nn.Sequential(
+            nn.Conv2d(channels, channels, 1, bias=False),
+            nn.BatchNorm2d(channels, momentum=bn_mom),
+        )
+        nn.init.zeros_(self.refine[1].weight)
+        nn.init.zeros_(self.refine[1].bias)
+
+    def forward(self, feature, lesion_logits, boundary_logits, center_logits):
+        component_logits = [lesion_logits, boundary_logits, center_logits]
+        resized_probs = []
+        for logits in component_logits:
+            if logits.shape[-2:] != feature.shape[-2:]:
+                logits = F.interpolate(logits, size=feature.shape[-2:], mode="bilinear", align_corners=True)
+            resized_probs.append(torch.sigmoid(logits))
+
+        component_probs = torch.cat(resized_probs, dim=1)
+        gate = self.feedback_gate(component_probs)
+        confidence = component_probs.max(dim=1, keepdim=True).values
+        return feature + self.alpha * confidence * gate * self.refine(feature)
+
+
 class LesionAwareCrossScaleFusion(nn.Module):
     """Cross-scale gates between high-level lesion semantics and low-level edges."""
 
@@ -356,6 +510,7 @@ class DeepLab(nn.Module):
         attention_aspp_type=None,
         attention_decoder_type=None,
         decoder_conv_type="standard",
+        decoder_upsample_type="bilinear",
         use_ppm=False,
         ppm_bins=(1, 2, 3, 6),
         use_component_aux=False,
@@ -365,12 +520,18 @@ class DeepLab(nn.Module):
         lcaf_alpha=0.5,
         use_lglc=False,
         lglc_alpha=0.5,
+        use_chfr=False,
+        chfr_alpha=0.2,
+        use_cfr=False,
+        cfr_alpha=0.15,
     ):
         super().__init__()
         self.use_component_aux = use_component_aux
         self.use_lbsb = use_lbsb
         self.use_lcaf = use_lcaf
         self.use_lglc = use_lglc
+        self.use_chfr = use_chfr
+        self.use_cfr = use_cfr
 
         self.backbone, in_channels, low_level_channels = build_backbone(
             backbone,
@@ -390,6 +551,8 @@ class DeepLab(nn.Module):
         self.lglc = LocalGlobalLesionContextBlock(256, alpha=lglc_alpha) if use_lglc else nn.Identity()
         self.use_ppm = use_ppm
         self.ppm = PyramidPoolingModule(256, out_channels=256, pool_sizes=tuple(ppm_bins)) if use_ppm else nn.Identity()
+        upsample_scale = max(1, downsample_factor // 4)
+        self.decoder_upsample = build_decoder_upsample(decoder_upsample_type, 256, upsample_scale)
 
         self.shortcut_conv = nn.Sequential(
             nn.Conv2d(low_level_channels, 48, 1),
@@ -406,6 +569,8 @@ class DeepLab(nn.Module):
         )
         self.attention_decoder = build_attention(attention_decoder_type, 256)
         self.lbsb = LesionBoundarySharpeningBlock(256, alpha=lbsb_alpha) if use_lbsb else nn.Identity()
+        self.chfr = ComponentGuidedHighFrequencyRefinementBlock(256, alpha=chfr_alpha) if use_chfr else nn.Identity()
+        self.cfr = ComponentFeedbackRefinementBlock(256, alpha=cfr_alpha) if use_cfr else nn.Identity()
         self.cls_conv = nn.Conv2d(256, num_classes, 1, stride=1)
         if self.use_component_aux:
             self.lesion_aux_head = nn.Conv2d(256, 1, 1, stride=1)
@@ -413,6 +578,10 @@ class DeepLab(nn.Module):
             self.center_aux_head = nn.Conv2d(256, 1, 1, stride=1)
         elif self.use_lbsb:
             raise ValueError("LBSB requires use_component_aux=True so boundary logits are available.")
+        elif self.use_chfr:
+            raise ValueError("CHFR requires use_component_aux=True so component gates are available.")
+        elif self.use_cfr:
+            raise ValueError("CFR requires use_component_aux=True so component logits are available.")
 
     def forward(self, x):
         height, width = x.size(2), x.size(3)
@@ -425,21 +594,36 @@ class DeepLab(nn.Module):
         x = self.ppm(x)
         low_level_features = self.shortcut_conv(low_level_features)
 
-        x = F.interpolate(x, size=(low_level_features.size(2), low_level_features.size(3)), mode="bilinear", align_corners=True)
+        if self.decoder_upsample is None:
+            x = F.interpolate(x, size=(low_level_features.size(2), low_level_features.size(3)), mode="bilinear", align_corners=True)
+        else:
+            x = self.decoder_upsample(x)
+            if x.size(2) != low_level_features.size(2) or x.size(3) != low_level_features.size(3):
+                x = F.interpolate(x, size=(low_level_features.size(2), low_level_features.size(3)), mode="bilinear", align_corners=True)
         if self.use_lcaf:
             x, low_level_features = self.lcaf(x, low_level_features)
         x = self.cat_conv(torch.cat((x, low_level_features), dim=1))
         x = self.attention_decoder(x)
-        if self.use_lbsb:
+        lesion_feature_logits = None
+        boundary_feature_logits = None
+        center_feature_logits = None
+        if self.use_component_aux:
+            lesion_feature_logits = self.lesion_aux_head(x)
             boundary_feature_logits = self.boundary_aux_head(x)
+            center_feature_logits = self.center_aux_head(x)
+        if self.use_lbsb:
             x = self.lbsb(x, boundary_feature_logits)
+        if self.use_chfr:
+            x = self.chfr(x, lesion_feature_logits, boundary_feature_logits, center_feature_logits)
+        if self.use_cfr:
+            x = self.cfr(x, lesion_feature_logits, boundary_feature_logits, center_feature_logits)
         logits = self.cls_conv(x)
         logits = F.interpolate(logits, size=(height, width), mode="bilinear", align_corners=True)
         if not self.use_component_aux:
             return logits
         return {
             "logits": logits,
-            "lesion_logits": F.interpolate(self.lesion_aux_head(x), size=(height, width), mode="bilinear", align_corners=True),
-            "boundary_logits": F.interpolate(self.boundary_aux_head(x), size=(height, width), mode="bilinear", align_corners=True),
-            "center_logits": F.interpolate(self.center_aux_head(x), size=(height, width), mode="bilinear", align_corners=True),
+            "lesion_logits": F.interpolate(lesion_feature_logits, size=(height, width), mode="bilinear", align_corners=True),
+            "boundary_logits": F.interpolate(boundary_feature_logits, size=(height, width), mode="bilinear", align_corners=True),
+            "center_logits": F.interpolate(center_feature_logits, size=(height, width), mode="bilinear", align_corners=True),
         }

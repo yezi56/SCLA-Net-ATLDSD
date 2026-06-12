@@ -2,8 +2,8 @@ import os
 
 import torch
 from nets.deeplabv3_training import (CE_Loss, Component_Aux_Loss, Dice_loss, Focal_Loss,
-                                     Focal_Tversky_Loss, Severity_Consistency_Loss, Softmax_CE_Loss,
-                                     weights_init)
+                                     Focal_Tversky_Loss, Lesion_Prior_Loss,
+                                     Severity_Consistency_Loss, Softmax_CE_Loss, weights_init)
 from tqdm import tqdm
 
 from utils.batch_mix import apply_batch_mix
@@ -14,7 +14,7 @@ from utils.utils_metrics import f_score
 def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Epoch, cuda, dice_loss, focal_loss, cls_weights, num_classes, \
     fp16, scaler, save_period, save_dir, local_rank=0, focal_alpha=0.5, focal_gamma=2.0, mix_mode="none", mix_prob=0.0, mixup_alpha=0.4, cutmix_alpha=1.0, \
     lbft_loss=False, lbft_lambda=1.0, lbft_alpha=0.3, lbft_beta=0.7, lbft_gamma=1.33, component_aux=False, component_lesion_weight=0.4, component_boundary_weight=0.2, component_center_weight=0.2, \
-    severity_consistency_loss=False, severity_consistency_weight=0.1, severity_loss_type="l1"):
+    severity_consistency_loss=False, severity_consistency_weight=0.1, severity_loss_type="l1", label_smoothing=0.0, dice_class_start=0, lesion_prior_loss=False, lesion_prior_weight=0.05, lesion_prior_pos_weight_cap=5.0):
     total_loss      = 0
     total_f_score   = 0
 
@@ -24,9 +24,9 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
     def compute_train_loss(outputs, pngs, labels, weights):
         if lbft_loss:
             if mix_mode == "mixup":
-                ce_loss = Softmax_CE_Loss(outputs, labels, weights, num_classes=num_classes)
+                ce_loss = Softmax_CE_Loss(outputs, labels, weights, num_classes=num_classes, label_smoothing=label_smoothing)
             else:
-                ce_loss = CE_Loss(outputs, pngs, weights, num_classes=num_classes)
+                ce_loss = CE_Loss(outputs, pngs, weights, num_classes=num_classes, label_smoothing=label_smoothing)
             tversky_loss = Focal_Tversky_Loss(
                 outputs,
                 labels,
@@ -40,12 +40,12 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
             focal_target = labels if mix_mode == "mixup" else pngs
             return Focal_Loss(outputs, focal_target, weights, num_classes=num_classes, alpha=focal_alpha, gamma=focal_gamma)
         if mix_mode == "mixup":
-            return Softmax_CE_Loss(outputs, labels, weights, num_classes=num_classes)
-        return CE_Loss(outputs, pngs, weights, num_classes=num_classes)
+            return Softmax_CE_Loss(outputs, labels, weights, num_classes=num_classes, label_smoothing=label_smoothing)
+        return CE_Loss(outputs, pngs, weights, num_classes=num_classes, label_smoothing=label_smoothing)
 
     def compute_val_loss(outputs, pngs, labels, weights):
         if lbft_loss:
-            ce_loss = CE_Loss(outputs, pngs, weights, num_classes=num_classes)
+            ce_loss = CE_Loss(outputs, pngs, weights, num_classes=num_classes, label_smoothing=label_smoothing)
             tversky_loss = Focal_Tversky_Loss(
                 outputs,
                 labels,
@@ -57,7 +57,7 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
 
         if focal_loss:
             return Focal_Loss(outputs, pngs, weights, num_classes=num_classes, alpha=focal_alpha, gamma=focal_gamma)
-        return CE_Loss(outputs, pngs, weights, num_classes=num_classes)
+        return CE_Loss(outputs, pngs, weights, num_classes=num_classes, label_smoothing=label_smoothing)
 
     if local_rank == 0:
         print('Start Train')
@@ -97,7 +97,7 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
             loss = compute_train_loss(outputs, pngs, labels, weights)
 
             if dice_loss:
-                main_dice = Dice_loss(outputs, labels)
+                main_dice = Dice_loss(outputs, labels, class_start=dice_class_start)
                 loss      = loss + main_dice
 
             if component_aux:
@@ -108,6 +108,14 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
                     lesion_weight=component_lesion_weight,
                     boundary_weight=component_boundary_weight,
                     center_weight=component_center_weight,
+                )
+
+            if lesion_prior_loss:
+                loss = loss + lesion_prior_weight * Lesion_Prior_Loss(
+                    outputs,
+                    pngs,
+                    num_classes,
+                    pos_weight_cap=lesion_prior_pos_weight_cap,
                 )
 
             if severity_consistency_loss:
@@ -142,7 +150,7 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
                 loss = compute_train_loss(outputs, pngs, labels, weights)
 
                 if dice_loss:
-                    main_dice = Dice_loss(outputs, labels)
+                    main_dice = Dice_loss(outputs, labels, class_start=dice_class_start)
                     loss      = loss + main_dice
 
                 if component_aux:
@@ -153,6 +161,14 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
                         lesion_weight=component_lesion_weight,
                         boundary_weight=component_boundary_weight,
                         center_weight=component_center_weight,
+                    )
+
+                if lesion_prior_loss:
+                    loss = loss + lesion_prior_weight * Lesion_Prior_Loss(
+                        outputs,
+                        pngs,
+                        num_classes,
+                        pos_weight_cap=lesion_prior_pos_weight_cap,
                     )
 
                 if severity_consistency_loss:
@@ -214,8 +230,15 @@ def fit_one_epoch(model_train, model, loss_history, eval_callback, optimizer, ep
             loss = compute_val_loss(outputs, pngs, labels, weights)
 
             if dice_loss:
-                main_dice = Dice_loss(outputs, labels)
+                main_dice = Dice_loss(outputs, labels, class_start=dice_class_start)
                 loss  = loss + main_dice
+            if lesion_prior_loss:
+                loss = loss + lesion_prior_weight * Lesion_Prior_Loss(
+                    outputs,
+                    pngs,
+                    num_classes,
+                    pos_weight_cap=lesion_prior_pos_weight_cap,
+                )
             if severity_consistency_loss:
                 loss = loss + severity_consistency_weight * Severity_Consistency_Loss(
                     outputs,
