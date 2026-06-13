@@ -11,6 +11,7 @@ outputs/
 logs/
 runs/
 checkpoints/
+.temp_miou_out/
 *.pth
 *.pt
 *.onnx
